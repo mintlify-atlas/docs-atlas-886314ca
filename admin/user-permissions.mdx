@@ -1,0 +1,291 @@
+---
+title: 'User Permissions'
+description: 'Understanding permission checks and user role logic'
+---
+
+## Admin Identification
+
+The system identifies administrators using a hardcoded array of document numbers:
+
+```javascript
+const ADMINS = ['1028783377', '1019096266'];
+```
+
+**Source:** `Panel.jsx:17`
+
+## Permission Check Logic
+
+### Document Extraction
+
+The system first extracts the user's document number from the employee data:
+
+```javascript
+const documentoUsuario = String(datosEmpleado?.documento || datosEmpleado?.document_number || '');
+```
+
+**Source:** `Panel.jsx:360`
+
+This checks two possible field names:
+- `datosEmpleado.documento`
+- `datosEmpleado.document_number`
+
+### Admin Status Check
+
+The `esAdmin` boolean determines if the user has administrative privileges:
+
+```javascript
+const esAdmin = ADMINS.includes(documentoUsuario);
+```
+
+**Source:** `Panel.jsx:361`
+
+This performs a simple array inclusion check - if the user's document number matches either `'1028783377'` or `'1019096266'`, they are granted admin access.
+
+## Permission-Based Features
+
+### 1. Viewing All Reservations
+
+Regular users can only see their own reservations. Admins see all reservations:
+
+```javascript
+const filtroDocumento = esAdmin
+  ? ''
+  : `&filters[documento][$eq]=${encodeURIComponent(documentoUsuario)}`;
+```
+
+**Source:** `Panel.jsx:471-473`
+
+**Regular Users:** API filter includes `&filters[documento][$eq]=<their_document>`
+
+**Admins:** No document filter applied, returning all reservations
+
+### 2. Manual Confirmation Bypass
+
+Regular users must meet two criteria to confirm:
+- Be within the 25-minute confirmation window
+- Be physically near the workplace (geolocation check)
+
+Admins bypass both restrictions:
+
+```javascript
+if (esAdmin) {
+  setConfirmando(id);
+  try {
+    const mensaje = 'Reserva confirmada por administrador.';
+
+    await updateReservaWithVerification(id, {
+      estado: 'Confirmada',
+      confirmada: true,
+      verificacionAsistencia: {
+        fecha: new Date().toISOString(),
+        mensaje,
+        tipo: 'confirmacion-admin-manual',
+        autorizadaPor: documentoUsuario,
+        nombreAutorizador: datosEmpleado?.nombre ?? 'Administrador',
+      },
+    }, reservaAux);
+    
+    alert('Reserva confirmada por administrador.');
+  } catch (err) {
+    alert(err?.message || 'Error al confirmar la reserva.');
+  } finally {
+    setConfirmando(null);
+  }
+  return;
+}
+```
+
+**Source:** `Panel.jsx:557-602`
+
+The admin path exits early with `return`, never executing the geolocation and time window checks that follow.
+
+### 3. Reactivation Access
+
+Only admins can reactivate canceled reservations:
+
+```javascript
+const handleReactivar = async (id) => {
+  if (!esAdmin) return;
+  
+  // ... reactivation logic
+};
+```
+
+**Source:** `Panel.jsx:674-676`
+
+The function immediately returns if `esAdmin` is false.
+
+### 4. Admin Tab Visibility
+
+The admin filtering tabs are only rendered for admin users:
+
+```javascript
+{esAdmin && (
+  <div style={{ display: "flex", gap: 6 }}>
+    {[
+      { key: 'todos',  label: 'Todas' },
+      { key: 'mis',    label: 'Mis reservas' },
+      { key: 'otros',  label: 'Otras' },
+    ].map(({ key, label }) => (
+      <button
+        key={key}
+        onClick={() => setAdminTab(key)}
+        // ... styles
+      >{label}</button>
+    ))}
+  </div>
+)}
+```
+
+**Source:** `Panel.jsx:1030-1056`
+
+### 5. Enhanced Search Placeholder
+
+The search input placeholder text changes based on admin status:
+
+```javascript
+placeholder={esAdmin ? "Buscar por ID, nombre, cédula…" : "Buscar por ID de reserva…"}
+```
+
+**Source:** `Panel.jsx:1103`
+
+**Regular Users:** Can only search by reservation ID
+
+**Admins:** Can search by ID, name, and document number
+
+### 6. User Column Display
+
+The reservations table shows a "Usuario" (User) column only for admins:
+
+```javascript
+{[
+  'ID',
+  ...(esAdmin ? ['Usuario'] : []),
+  'Fecha',
+  'Sala / Escritorio',
+  'Turno',
+  'Estado',
+  'Motivo',
+  'Acción',
+].map(h => (
+  <th key={h}>{h}</th>
+))}
+```
+
+**Source:** `Panel.jsx:1176-1192`
+
+## UI Permission Indicators
+
+### Profile Badge
+
+The user's role is displayed in their profile:
+
+```javascript
+<div style={{ 
+  marginTop: 10, 
+  fontSize: "0.78rem", 
+  color: esAdmin ? "#CC8A22" : "#92614F", 
+  fontWeight: 700 
+}}>
+  {esAdmin ? 'Administrador' : 'Usuario'}
+</div>
+```
+
+**Source:** `Panel.jsx:920-922`
+
+**Color Coding:**
+- Admin: `#CC8A22` (golden/amber)
+- User: `#92614F` (brown)
+
+### Permission Description Box
+
+Admins see a different information box explaining their privileges:
+
+```javascript
+{esAdmin ? (
+  <div style={{
+    marginTop: 12, padding: "10px 12px",
+    background: "rgba(204,138,34,0.08)", borderRadius: 10,
+    display: "flex", flexDirection: "column", gap: 8,
+  }}>
+    <div style={{ fontSize: "0.75rem", color: "#8A6D3B", fontWeight: 700 }}>
+      Permisos de administrador
+    </div>
+    <div style={{ fontSize: "0.74rem", color: "#8A6D3B" }}>
+      Puedes ver todas las reservas y confirmar manualmente cualquier reserva pendiente, incluso fuera de la ventana de 25 minutos.
+    </div>
+  </div>
+) : (
+  // ... location verification box for regular users
+)}
+```
+
+**Source:** `Panel.jsx:948-993`
+
+Regular users see location verification status instead.
+
+## Verification Type Tracking
+
+All admin actions are tracked with specific verification types:
+
+<AccordionGroup>
+  <Accordion title="confirmacion-admin-manual">
+    **Used for:** Manual confirmation by admin
+    
+    **Records:**
+    - `autorizadaPor`: Admin's document number
+    - `nombreAutorizador`: Admin's name
+    - `mensaje`: "Reserva confirmada por administrador."
+    
+    **Source:** `Panel.jsx:568`
+  </Accordion>
+  
+  <Accordion title="reactivacion-admin">
+    **Used for:** Reactivating a canceled reservation
+    
+    **Records:**
+    - `autorizadaPor`: Admin's document number
+    - `nombreAutorizador`: Admin's name
+    - `mensaje`: "Reserva reactivada por administrador."
+    
+    **Source:** `Panel.jsx:692`
+  </Accordion>
+  
+  <Accordion title="confirmacion-manual-geolocalizada">
+    **Used for:** Regular user confirmation (not admin)
+    
+    **Records:**
+    - `distancia`: Distance in meters from workplace
+    - No authorization fields
+    
+    **Source:** `Panel.jsx:641`
+  </Accordion>
+</AccordionGroup>
+
+## Security Considerations
+
+<Warning>
+Admin permissions are currently hardcoded in the frontend application. Consider these security implications:
+
+1. **Client-Side Check**: The `esAdmin` check happens in the browser, which could be manipulated by technically savvy users
+2. **API Validation**: Ensure backend endpoints also validate admin status before allowing privileged operations
+3. **Document Number Privacy**: Admin document numbers are exposed in the client bundle
+</Warning>
+
+## Adding New Admins
+
+To add a new administrator:
+
+1. Locate the ADMINS array in `Panel.jsx:17`
+2. Add the user's document number as a string:
+
+```javascript
+const ADMINS = ['1028783377', '1019096266', 'NEW_DOCUMENT_NUMBER'];
+```
+
+3. Rebuild and redeploy the application
+4. Verify the user can see the "Administrador" badge when logged in
+
+<Note>
+Changes to the ADMINS array require a code deployment. Consider implementing a database-driven role system for production environments.
+</Note>

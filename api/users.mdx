@@ -1,0 +1,476 @@
+---
+title: Users API
+description: User data, verification, and geolocation features
+---
+
+## Overview
+
+The user system handles employee data, permissions, and location-based verification for reservation confirmations.
+
+## User Data Structure
+
+Users are identified and managed through employee data:
+
+<ResponseField name="nombre" type="string">
+  Full name of the employee
+</ResponseField>
+
+<ResponseField name="document_number" type="string">
+  Unique document/ID number (primary identifier)
+</ResponseField>
+
+<ResponseField name="documento" type="string">
+  Alternative field for document number
+</ResponseField>
+
+<ResponseField name="foto" type="string">
+  URL to user's profile photo
+</ResponseField>
+
+<ResponseField name="cargo" type="string">
+  Job title/position
+</ResponseField>
+
+<ResponseField name="area_nombre" type="string">
+  Department or area name
+</ResponseField>
+
+<ResponseField name="correo" type="string">
+  Email address (optional)
+</ResponseField>
+
+### Example User Object
+
+```javascript
+const datosEmpleado = {
+  nombre: 'Juan Pérez García',
+  document_number: '1234567890',
+  documento: '1234567890',
+  foto: 'https://example.com/photos/juan.jpg',
+  cargo: 'Desarrollador Senior',
+  area_nombre: 'Desarrollo de Software',
+  correo: 'juan.perez@example.com'
+};
+```
+
+## User Roles
+
+### Administrator Users
+
+Administrators have special privileges for reservation management:
+
+```javascript
+const ADMINS = ['1028783377', '1019096266'];
+
+const esAdmin = ADMINS.includes(String(usuario.document_number));
+```
+
+**Admin Privileges:**
+- View all system reservations (not just their own)
+- Manually confirm reservations outside verification windows
+- Cancel any reservation
+- Reactivate cancelled reservations
+- Bypass geolocation requirements
+
+### Regular Users
+
+**Regular User Capabilities:**
+- View their own reservations only
+- Create new reservations
+- Confirm reservations within the 25-minute verification window
+- Must be within 1000m of workplace to confirm
+- Cancel their own pending/confirmed reservations
+
+## Geolocation Verification
+
+Regular users must verify their physical presence to confirm reservations.
+
+### Workplace Coordinates
+
+```javascript
+const WORKPLACE_COORDS = {
+  latitude: 4.74488,
+  longitude: -74.04483,
+  name: 'Crepe-Working 1'
+};
+
+const ALLOWED_RADIUS_METERS = 1000;
+```
+
+### Get Current Position
+
+```javascript
+import { getCurrentPosition } from './utils/geolocationService';
+
+try {
+  const position = await getCurrentPosition();
+  console.log(position);
+  // {
+  //   latitude: 4.74500,
+  //   longitude: -74.04500,
+  //   accuracy: 10,
+  //   altitude: 2600,
+  //   timestamp: 1710417600000
+  // }
+} catch (error) {
+  console.error(error.message);
+  // "Permiso de ubicación denegado"
+}
+```
+
+<ResponseField name="latitude" type="number">
+  User's latitude coordinate
+</ResponseField>
+
+<ResponseField name="longitude" type="number">
+  User's longitude coordinate
+</ResponseField>
+
+<ResponseField name="accuracy" type="number">
+  GPS accuracy in meters
+</ResponseField>
+
+<ResponseField name="altitude" type="number">
+  Altitude in meters (if available)
+</ResponseField>
+
+<ResponseField name="timestamp" type="number">
+  Position timestamp in milliseconds
+</ResponseField>
+
+### Calculate Distance
+
+Calculate distance between user and workplace using Haversine formula:
+
+```javascript
+import { calculateDistance } from './utils/geolocationService';
+
+const distance = calculateDistance(
+  userLat,
+  userLon,
+  workplaceLat,
+  workplaceLon
+);
+
+console.log(`Distance: ${distance.toFixed(2)} meters`);
+```
+
+### Check if Within Radius
+
+```javascript
+import { isWithinRadius } from './utils/geolocationService';
+
+const withinPerimeter = isWithinRadius(userLat, userLon);
+
+if (withinPerimeter) {
+  console.log('User is at the workplace');
+} else {
+  console.log('User is too far from workplace');
+}
+```
+
+## Attendance Verification
+
+Verify user attendance for a reservation:
+
+```javascript
+import { verifyAttendance } from './utils/geolocationService';
+
+const result = await verifyAttendance(reserva, {
+  workplaceInfo: {
+    latitude: 4.74488,
+    longitude: -74.04483,
+    radius: 1000
+  },
+  referenceDate: new Date()
+});
+
+console.log(result);
+```
+
+### Verification Response
+
+<ResponseField name="success" type="boolean">
+  Whether verification was successful
+</ResponseField>
+
+<ResponseField name="shouldUpdate" type="boolean">
+  Whether the reservation should be updated
+</ResponseField>
+
+<ResponseField name="newStatus" type="string">
+  New reservation status: 'Confirmada', 'Cancelada', or 'Pendiente'
+</ResponseField>
+
+<ResponseField name="confirmed" type="boolean | null">
+  Confirmation state for the reservation
+</ResponseField>
+
+<ResponseField name="withinPerimeter" type="boolean">
+  Whether user is within the allowed radius
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Human-readable verification message
+</ResponseField>
+
+<ResponseField name="distance" type="number">
+  Distance from workplace in meters
+</ResponseField>
+
+<ResponseField name="position" type="object">
+  User's GPS coordinates
+</ResponseField>
+
+<ResponseField name="timeInfo" type="object">
+  Verification time window information
+</ResponseField>
+
+<ResponseField name="alertType" type="string">
+  Alert severity: 'success', 'warning', 'error', or 'info'
+</ResponseField>
+
+### Example Verification Results
+
+**Success (Within Perimeter):**
+
+```json
+{
+  "success": true,
+  "shouldUpdate": true,
+  "newStatus": "Confirmada",
+  "confirmed": true,
+  "withinPerimeter": true,
+  "message": "Asistencia confirmada. Distancia: 150 metros.",
+  "distance": 150.5,
+  "position": {
+    "latitude": 4.74500,
+    "longitude": -74.04500,
+    "accuracy": 10
+  },
+  "alertType": "success"
+}
+```
+
+**Failure (Outside Perimeter):**
+
+```json
+{
+  "success": false,
+  "shouldUpdate": false,
+  "newStatus": "Pendiente",
+  "confirmed": null,
+  "withinPerimeter": false,
+  "message": "Estás a 1500 metros del punto. Debes estar dentro de 1000 metros antes de las 08:25.",
+  "distance": 1500.2,
+  "alertType": "warning"
+}
+```
+
+## Geolocation Permissions
+
+### Check Permission Status
+
+```javascript
+import { checkLocationPermission } from './utils/geolocationService';
+
+const status = await checkLocationPermission();
+console.log(status); // 'granted', 'denied', 'prompt', or 'unsupported'
+```
+
+### Request Location Permission
+
+```javascript
+import { requestLocationPermission } from './utils/geolocationService';
+
+const granted = await requestLocationPermission();
+if (granted) {
+  console.log('Permission granted');
+} else {
+  console.log('Permission denied');
+}
+```
+
+### Check Geolocation Support
+
+```javascript
+import { checkGeolocationSupport } from './utils/geolocationService';
+
+const support = checkGeolocationSupport();
+console.log(support);
+// {
+//   supported: true,
+//   hasPermissionsAPI: true,
+//   isSecureContext: true,
+//   warnings: []
+// }
+```
+
+<ResponseField name="supported" type="boolean">
+  Whether the browser supports geolocation
+</ResponseField>
+
+<ResponseField name="hasPermissionsAPI" type="boolean">
+  Whether the Permissions API is available
+</ResponseField>
+
+<ResponseField name="isSecureContext" type="boolean">
+  Whether running in HTTPS or localhost
+</ResponseField>
+
+<ResponseField name="warnings" type="array">
+  Array of warning messages about geolocation support
+</ResponseField>
+
+## Device Information
+
+Detect user's device and browser:
+
+```javascript
+import { getDeviceInfo } from './utils/geolocationService';
+
+const device = getDeviceInfo();
+console.log(device);
+// {
+//   isIOS: false,
+//   isAndroid: true,
+//   isMobile: true,
+//   isDesktop: false,
+//   browser: {
+//     isChrome: true,
+//     isSafari: false,
+//     isFirefox: false,
+//     isEdge: false,
+//     name: 'Chrome'
+//   }
+// }
+```
+
+## User Display Utilities
+
+### Get Short Name
+
+```javascript
+const getNombreCorto = (nombre) => {
+  const partes = nombre.trim().split(/\s+/);
+  if (partes.length >= 2) {
+    return `${partes[0]} ${partes[1]}`;
+  }
+  return partes[0] ?? '';
+};
+
+// Example:
+getNombreCorto('Juan Pérez García López');
+// Returns: "Juan Pérez"
+```
+
+### Get First Name
+
+```javascript
+const getPrimerNombre = (reserva) => {
+  return getNombre(reserva).split(' ')[0];
+};
+
+// Example:
+getPrimerNombre({ attributes: { Nombre: 'Juan Pérez' } });
+// Returns: "Juan"
+```
+
+## User Filtering
+
+### Get User Reservations
+
+```javascript
+import { getReservasByUsuario } from './utils/reservasService';
+
+const reservas = await getReservasByUsuario('1234567890');
+```
+
+### Get User History
+
+Fetch past reservations for rotation validation:
+
+```javascript
+const buildUserHistoryUrl = (documento, fecha) => {
+  const params = new URLSearchParams({
+    'filters[documento][$eq]': documento,
+    'filters[fecha_reserva][$lt]': fecha,
+    'sort[0]': 'fecha_reserva:desc',
+    'pagination[pageSize]': '50',
+    'populate': '*'
+  });
+  return `${API_RESERVAS}?${params.toString()}`;
+};
+
+const url = buildUserHistoryUrl('1234567890', '2026-03-15');
+const response = await fetch(url);
+const data = await response.json();
+```
+
+## Desk Rotation Rules
+
+Users must rotate desk positions between reservations:
+
+```javascript
+// Get user's last reservation
+const ultimaReservaPrevia = await fetchUserLastReservation(documento, fechaISO);
+
+const ultimoPuestoReservado = ultimaReservaPrevia?.puestoId;
+
+// Block user from selecting the same desk
+if (selectedId === ultimoPuestoReservado) {
+  setError(
+    `Tu última reserva fue el ${fechaUltima} en el escritorio ${ultimoPuestoReservado}. ` +
+    'Debes hacer rotación y elegir otro escritorio.'
+  );
+}
+```
+
+## Admin Operations
+
+### Manual Confirmation (Admin Only)
+
+```javascript
+if (esAdmin) {
+  await updateReservaWithVerification(reservaId, {
+    estado: 'Confirmada',
+    confirmada: true,
+    verificacionAsistencia: {
+      fecha: new Date().toISOString(),
+      mensaje: 'Reserva confirmada por administrador.',
+      tipo: 'confirmacion-admin-manual',
+      autorizadaPor: adminDocumento,
+      nombreAutorizador: adminNombre,
+    },
+  });
+}
+```
+
+### Reactivate Cancelled Reservation (Admin Only)
+
+```javascript
+if (esAdmin) {
+  await updateReservaWithVerification(reservaId, {
+    estado: 'Pendiente',
+    confirmada: null,
+    motivoCancelacion: null,
+    verificacionAsistencia: {
+      fecha: new Date().toISOString(),
+      mensaje: 'Reserva reactivada por administrador.',
+      tipo: 'reactivacion-admin',
+      autorizadaPor: adminDocumento,
+    },
+  });
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Reservations API" icon="calendar-check" href="/api/reservations">
+    Create and manage reservations
+  </Card>
+  <Card title="Authentication" icon="key" href="/api/authentication">
+    Learn about user authorization
+  </Card>
+</CardGroup>

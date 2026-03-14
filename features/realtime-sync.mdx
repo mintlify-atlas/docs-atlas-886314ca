@@ -1,0 +1,411 @@
+---
+title: Realtime Sync
+description: WebSocket and polling-based real-time synchronization system for reservation updates
+icon: arrows-rotate
+---
+
+## Overview
+
+The realtime sync system combines WebSocket connections with polling fallback to ensure reservation data stays synchronized across all clients in real-time.
+
+## Configuration
+
+### Environment Variables
+
+```javascript useRealtimeSync.js
+const WS_URL = import.meta.env.VITE_RESERVAS_WS_URL || '';
+const POLLING_MS = Number(import.meta.env.VITE_RESERVAS_POLLING_MS || 30000);
+const MAX_RECONNECT_MS = 15000;
+```
+
+### Configuration Values
+
+- **WS_URL**: WebSocket server URL (optional)
+- **POLLING_MS**: Polling interval in milliseconds (default: 30000 = 30 seconds)
+- **MAX_RECONNECT_MS**: Maximum reconnection delay (15 seconds)
+
+<Info>
+If `VITE_RESERVAS_WS_URL` is not configured, the system falls back to polling and custom events only.
+</Info>
+
+## Custom Events
+
+### Event Names
+
+```javascript useRealtimeSync.js
+window.addEventListener('reservas-updated', handleCustomSync);
+window.addEventListener('working-reservas-updated', handleCustomSync);
+```
+
+### Emit Events
+
+```javascript useRealtimeSync.js
+const notifyChange = useCallback(() => {
+  window.dispatchEvent(new CustomEvent('reservas-updated'));
+  window.dispatchEvent(new CustomEvent('working-reservas-updated'));
+
+  if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+    wsRef.current.send(JSON.stringify({
+      event: 'working-reservas-updated',
+      source: 'client',
+      timestamp: Date.now(),
+    }));
+  }
+
+  console.log('✅ Notificación de cambio enviada');
+}, []);
+```
+
+### Service Integration
+
+```javascript reservasService.js
+const RESERVAS_UPDATED_EVENT = 'working-reservas-updated';
+
+const emitReservationsUpdated = (detail = {}) => {
+  window.dispatchEvent(new CustomEvent(RESERVAS_UPDATED_EVENT, {
+    detail: { timestamp: Date.now(), ...detail },
+  }));
+};
+```
+
+## WebSocket Integration
+
+### Connection Setup
+
+```javascript useRealtimeSync.js
+const connect = () => {
+  if (unmounted) return;
+
+  try {
+    const ws = new WebSocket(WS_URL);
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      reconnectAttemptRef.current = 0;
+      console.log('✅ WebSocket conectado para reservas');
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data);
+        if (shouldSyncFromSocketPayload(payload)) {
+          triggerSync('websocket-message');
+        }
+      } catch {
+        const text = normalizeText(event.data);
+        if (text.includes('reserva') ||
+            text.includes('working-reserva') ||
+            text.includes('working-reservas')) {
+          triggerSync('websocket-text');
+        }
+      }
+    };
+
+    ws.onerror = (error) => {
+      console.warn('⚠️ Error en WebSocket de reservas:', error);
+    };
+
+    ws.onclose = () => {
+      wsRef.current = null;
+      if (unmounted) return;
+
+      reconnectAttemptRef.current += 1;
+      const delay = Math.min(
+        1000 * (2 ** reconnectAttemptRef.current),
+        MAX_RECONNECT_MS
+      );
+
+      reconnectTimerRef.current = setTimeout(() => {
+        connect();
+      }, delay);
+
+      console.warn(
+        `🔁 WebSocket desconectado. Reintentando en ${Math.round(delay / 1000)}s...`
+      );
+    };
+  } catch (error) {
+    console.error('❌ No se pudo iniciar WebSocket de reservas:', error);
+  }
+};
+```
+
+### Exponential Backoff
+
+```javascript useRealtimeSync.js
+reconnectAttemptRef.current += 1;
+const delay = Math.min(
+  1000 * (2 ** reconnectAttemptRef.current),
+  MAX_RECONNECT_MS
+);
+```
+
+**Reconnection delays:**
+- Attempt 1: 2 seconds
+- Attempt 2: 4 seconds
+- Attempt 3: 8 seconds
+- Attempt 4+: 15 seconds (capped)
+
+### Message Validation
+
+```javascript useRealtimeSync.js
+const normalizeText = (value) => String(value || '').toLowerCase();
+
+const shouldSyncFromSocketPayload = (payload) => {
+  if (!payload || typeof payload !== 'object') return false;
+
+  const eventText = normalizeText(
+    payload.event || payload.type || payload.action || payload.topic
+  );
+  const modelText = normalizeText(
+    payload.model || payload.collection || payload.entity || payload.resource
+  );
+  const dataText = normalizeText(
+    JSON.stringify(payload.data || payload.payload || {})
+  );
+  const fullText = `${eventText} ${modelText} ${dataText}`;
+
+  return (
+    fullText.includes('working-reservas-updated') ||
+    fullText.includes('reservas-updated') ||
+    fullText.includes('working-reserva') ||
+    fullText.includes('working-reservas') ||
+    fullText.includes('reserva')
+  );
+};
+```
+
+## Polling System
+
+### Polling Interval
+
+```javascript useRealtimeSync.js
+useEffect(() => {
+  syncIntervalRef.current = setInterval(() => {
+    const timeSinceLastSync = Date.now() - lastSyncRef.current;
+
+    if (timeSinceLastSync > POLLING_MS - 5000) {
+      console.log('⏰ Sincronización automática (polling)');
+      triggerSync('polling');
+    }
+  }, POLLING_MS);
+
+  return () => {
+    if (syncIntervalRef.current) {
+      clearInterval(syncIntervalRef.current);
+    }
+    if (syncDebounceRef.current) {
+      clearTimeout(syncDebounceRef.current);
+    }
+  };
+}, [triggerSync]);
+```
+
+<Note>
+Polling runs every 30 seconds as a fallback mechanism if WebSocket events are missed.
+</Note>
+
+## Sync Trigger System
+
+### Trigger with Debounce
+
+```javascript useRealtimeSync.js
+const triggerSync = useCallback((source = 'manual') => {
+  if (syncDebounceRef.current) {
+    clearTimeout(syncDebounceRef.current);
+  }
+
+  syncDebounceRef.current = setTimeout(() => {
+    console.log(`🔄 Sincronización disparada desde: ${source}`);
+    if (onSync) {
+      onSync();
+    }
+    lastSyncRef.current = Date.now();
+    syncDebounceRef.current = null;
+  }, 120);
+
+  lastSyncRef.current = Date.now();
+}, [onSync]);
+```
+
+**Debounce delay:** 120ms
+
+### Sync Sources
+
+- **manual**: Manually triggered sync
+- **custom-event**: Triggered by `reservas-updated` or `working-reservas-updated` events
+- **websocket-message**: WebSocket JSON message received
+- **websocket-text**: WebSocket text message received
+- **polling**: Automatic polling interval
+
+## Usage Example
+
+### Hook Integration
+
+```javascript Reservas.jsx
+import useRealtimeSync from '../hooks/useRealtimeSync';
+
+function Reservas() {
+  const cargarReservas = useCallback(() => {
+    setLoadingR(true);
+    fetch(buildGetUrl(fechaISO))
+      .then(r => r.json())
+      .then(json => {
+        const data = Array.isArray(json.data) ? json.data : [];
+        setReservas(data);
+      })
+      .catch(err => {
+        console.error('[Reservas] error:', err);
+        setReservas([]);
+      })
+      .finally(() => setLoadingR(false));
+  }, [fechaISO]);
+
+  // Hook setup - syncs on any change
+  useRealtimeSync(cargarReservas);
+
+  return (/* ... */);
+}
+```
+
+### Manual Notification
+
+```javascript Reservas.jsx
+const handleReservar = async (horarioObj) => {
+  // ... reservation logic ...
+  
+  const res = await fetch(API_RESERVAS, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  
+  if (res.ok) {
+    setReservaOk(true);
+    // Notify other clients
+    window.dispatchEvent(new CustomEvent('working-reservas-updated'));
+    cargarReservas();
+  }
+};
+```
+
+## Hook API
+
+### Return Values
+
+```javascript useRealtimeSync.js
+return {
+  triggerSync,
+  notifyChange,
+};
+```
+
+**Methods:**
+
+- **triggerSync(source?)**: Manually trigger a sync operation
+- **notifyChange()**: Emit change events and notify WebSocket server
+
+### Example Usage
+
+```javascript
+const { triggerSync, notifyChange } = useRealtimeSync(onSync);
+
+// Manually sync
+triggerSync('user-action');
+
+// Notify other clients after mutation
+await updateReservation(data);
+notifyChange();
+```
+
+## Cleanup and Lifecycle
+
+### Component Unmount
+
+```javascript useRealtimeSync.js
+return () => {
+  unmounted = true;
+  if (reconnectTimerRef.current) {
+    clearTimeout(reconnectTimerRef.current);
+    reconnectTimerRef.current = null;
+  }
+  if (wsRef.current) {
+    wsRef.current.close();
+    wsRef.current = null;
+  }
+};
+```
+
+### Interval Cleanup
+
+```javascript useRealtimeSync.js
+return () => {
+  if (syncIntervalRef.current) {
+    clearInterval(syncIntervalRef.current);
+  }
+  if (syncDebounceRef.current) {
+    clearTimeout(syncDebounceRef.current);
+  }
+};
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="WebSocket Configuration">
+    Set `VITE_RESERVAS_WS_URL` in your `.env` file for real-time updates:
+    
+    ```bash
+    VITE_RESERVAS_WS_URL=wss://your-server.com/reservas
+    VITE_RESERVAS_POLLING_MS=30000
+    ```
+  </Accordion>
+
+  <Accordion title="Event Emission">
+    Always emit `working-reservas-updated` events after mutations:
+    
+    ```javascript
+    await updateReservation(data);
+    window.dispatchEvent(new CustomEvent('working-reservas-updated'));
+    ```
+  </Accordion>
+
+  <Accordion title="Debouncing">
+    The sync system automatically debounces rapid updates (120ms delay) to prevent excessive API calls.
+  </Accordion>
+
+  <Accordion title="Fallback Strategy">
+    Even without WebSocket, the system uses:
+    1. Custom DOM events for same-page updates
+    2. Polling every 30 seconds as fallback
+    
+    This ensures data stays synchronized across all scenarios.
+  </Accordion>
+</AccordionGroup>
+
+## Debugging
+
+### Console Logs
+
+The sync system provides detailed console logs:
+
+```
+ℹ️ WebSocket no configurado (VITE_RESERVAS_WS_URL). Se usa eventos locales + polling.
+✅ WebSocket conectado para reservas
+🔄 Sincronización disparada desde: websocket-message
+⚠️ Error en WebSocket de reservas: [error]
+🔁 WebSocket desconectado. Reintentando en 4s...
+⏰ Sincronización automática (polling)
+📋 Evento de sincronización recibido
+✅ Notificación de cambio enviada
+```
+
+## Related Features
+
+<CardGroup cols={2}>
+  <Card title="Reservations" icon="calendar-check" href="/features/reservations">
+    Core reservation system that uses realtime sync
+  </Card>
+  <Card title="Attendance Verification" icon="location-dot" href="/features/attendance-verification">
+    GPS verification that triggers sync events
+  </Card>
+</CardGroup>

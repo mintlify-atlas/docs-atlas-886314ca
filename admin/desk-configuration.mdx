@@ -1,0 +1,248 @@
+---
+title: 'Desk Configuration'
+description: 'Understanding desk, room, and schedule metadata'
+---
+
+## Overview
+
+The reservation system organizes workspaces using a hierarchical structure: desks belong to rooms, and reservations are assigned time slots based on schedule metadata.
+
+## Schedule Metadata
+
+The system uses predefined schedule configurations identified by ID:
+
+```javascript
+const HORARIO_META = {
+  1: { label: 'Mañana',      hora: '8:00 am – 12:00 m' },
+  2: { label: 'Tarde',        hora: '1:00 pm – 5:00 pm' },
+  3: { label: 'Día completo', hora: '8:00 am – 5:00 pm' },
+};
+```
+
+**Source:** `Panel.jsx:20-24`
+
+### Schedule Structure
+
+<AccordionGroup>
+  <Accordion title="Schedule ID 1 - Mañana (Morning)">
+    **Label:** Mañana
+    
+    **Hours:** 8:00 am – 12:00 m
+    
+    **Duration:** 4 hours
+  </Accordion>
+  
+  <Accordion title="Schedule ID 2 - Tarde (Afternoon)">
+    **Label:** Tarde
+    
+    **Hours:** 1:00 pm – 5:00 pm
+    
+    **Duration:** 4 hours
+  </Accordion>
+  
+  <Accordion title="Schedule ID 3 - Día completo (Full Day)">
+    **Label:** Día completo
+    
+    **Hours:** 8:00 am – 5:00 pm
+    
+    **Duration:** 8 hours (with implied lunch break)
+  </Accordion>
+</AccordionGroup>
+
+## Desk Structure
+
+### Extracting Desk ID
+
+The system extracts desk (puesto) IDs from various reservation data formats:
+
+```javascript
+const getPuestoId = (r) => {
+  return (
+    extractId(r.attributes?.working_puestos) ??
+    extractId(r.working_puestos) ??
+    r.attributes?.escritorioId ??
+    r.escritorioId ??
+    null
+  );
+};
+```
+
+**Source:** `Panel.jsx:75-83`
+
+The function checks multiple possible locations for the desk ID:
+1. `r.attributes.working_puestos` (relation)
+2. `r.working_puestos` (direct relation)
+3. `r.attributes.escritorioId` (legacy field)
+4. `r.escritorioId` (direct field)
+
+### Desk Display
+
+Desks are displayed with their numeric ID:
+
+```javascript
+<span style={{ fontWeight: 700, fontSize: "0.85rem", color: "#503629", whiteSpace: "nowrap" }}>
+  Escritorio {r.puestoId ?? '—'}
+</span>
+```
+
+**Source:** `Panel.jsx:205-207`
+
+## Room Information
+
+### Extracting Room Data
+
+Rooms (salas) are extracted from the desk's relation data:
+
+```javascript
+const getSalaInfo = (r) => {
+  const puestosData = r.attributes?.working_puestos?.data;
+  const pAttr = Array.isArray(puestosData)
+    ? puestosData[0]?.attributes
+    : puestosData?.attributes ?? null;
+  const salaData = pAttr?.working_sala?.data;
+  if (salaData) {
+    return {
+      salaId:    salaData.id ?? null,
+      salaNombre: salaData.attributes?.nombre ?? `Sala ${salaData.id}`,
+    };
+  }
+  return { salaId: null, salaNombre: null };
+};
+```
+
+**Source:** `Panel.jsx:110-123`
+
+### Room Filtering
+
+Admins can filter reservations by room:
+
+```javascript
+const availableSalas = useMemo(() => {
+  const map = new Map();
+  reservations.forEach(r => {
+    if (r.salaId) map.set(r.salaId, r.salaNombre ?? `Sala ${r.salaId}`);
+  });
+  return [...map.entries()].map(([id, nombre]) => ({ id, nombre }));
+}, [reservations]);
+```
+
+**Source:** `Panel.jsx:795-801`
+
+Filter dropdown:
+
+```javascript
+{availableSalas.length > 0 && (
+  <select
+    value={filterSala}
+    onChange={e => setFilterSala(e.target.value)}
+    style={{
+      padding: "6px 10px", borderRadius: 8,
+      border: "1px solid rgba(80,54,41,0.22)",
+      background: "#FDFAF7", color: "#503629",
+      fontSize: "0.75rem", fontFamily: "inherit",
+      cursor: "pointer",
+    }}
+  >
+    <option value="todas">Todas las salas</option>
+    {availableSalas.map(s => (
+      <option key={s.id} value={String(s.id)}>{s.nombre}</option>
+    ))}
+  </select>
+)}
+```
+
+**Source:** `Panel.jsx:1079-1096`
+
+### Room Display
+
+Room and desk information are shown together:
+
+```javascript
+<div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+  <Monitor size={13} color="#CC8A22" strokeWidth={2} />
+  <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+    {r.salaNombre && (
+      <span style={{ fontSize: "0.72rem", color: "#CC8A22", fontWeight: 600 }}>
+        {r.salaNombre}
+      </span>
+    )}
+    <span className="text-body" style={{ fontSize: "0.82rem" }}>
+      {r.puestoId ? `Escritorio ${r.puestoId}` : '—'}
+    </span>
+  </div>
+</div>
+```
+
+**Source:** `Panel.jsx:1245-1258`
+
+## Schedule Label Resolution
+
+The system resolves schedule labels from multiple sources:
+
+```javascript
+const getHorarioLabel = (r, horarioId) => {
+  const fromRelation =
+    r.attributes?.working_horarios?.data?.attributes?.nombre ??
+    r.attributes?.working_horarios?.attributes?.nombre ??
+    r.working_horarios?.data?.attributes?.nombre ??
+    r.working_horarios?.attributes?.nombre;
+
+  if (fromRelation) return fromRelation;
+  if (r.attributes?.turno) return r.attributes.turno;
+  if (r.attributes?.horario) return r.attributes.horario;
+
+  const meta = HORARIO_META[horarioId];
+  return meta?.label ?? null;
+};
+```
+
+**Source:** `Panel.jsx:95-108`
+
+Priority order:
+1. Relation data (`working_horarios.nombre`)
+2. Direct fields (`turno`, `horario`)
+3. Metadata lookup (`HORARIO_META[horarioId]`)
+
+## Data Normalization
+
+Reservations are normalized to a consistent format:
+
+```javascript
+const normalizadas = data.map(r => {
+  const puestoId = getPuestoId(r);
+  const horarioId = getHorarioId(r);
+  const escritorioFallback = r.attributes?.escritorio;
+  const escritorioMatch = typeof escritorioFallback === 'string'
+    ? escritorioFallback.match(/\d+/)?.[0]
+    : null;
+  const { salaId, salaNombre } = getSalaInfo(r);
+
+  return {
+    id:       r.id,
+    nombre:   getNombreCorto(r.attributes?.Nombre ?? r.attributes?.documento ?? '—'),
+    nombreCompleto: getNombreCompleto(r.attributes?.Nombre ?? r.attributes?.documento ?? '—'),
+    foto:     r.attributes?.foto      ?? null,
+    documento:r.attributes?.documento ?? '—',
+    area:     r.attributes?.area      ?? '—',
+    fecha:    r.attributes?.fecha_reserva ?? '—',
+    estado:   getEstadoReserva(r.attributes),
+    confirmada: r.attributes?.estado === true,
+    pendiente: r.attributes?.estado === null,
+    cancelada: r.attributes?.estado === false,
+    motivoCancelacion: r.attributes?.motivo_cancelacion ?? r.attributes?.motivoCancelacion ?? null,
+    motivoGestion: r.attributes?.verificacionAsistencia?.mensaje ?? null,
+    verificacionAsistencia: r.attributes?.verificacionAsistencia ?? null,
+    puestoId: puestoId ?? (escritorioMatch ? Number(escritorioMatch) : null),
+    salaId,
+    salaNombre,
+    horarioId,
+    horario: r.attributes?.horario ?? null,
+    turno: r.attributes?.turno ?? null,
+    horaInicio: r.attributes?.horaInicio ?? null,
+    horaFin: r.attributes?.horaFin ?? null,
+    turnoLabel: getHorarioLabel(r, horarioId),
+  };
+});
+```
+
+**Source:** `Panel.jsx:494-528`

@@ -1,0 +1,290 @@
+---
+title: Confirming Attendance
+description: How to confirm your reservation using geolocation verification
+---
+
+## Overview
+
+All reservations start with a **"Pendiente"** (Pending) status. To activate your reservation, you must **confirm your attendance** on the day of your booking using the geolocation verification system.
+
+<Warning>
+  **Time-Sensitive Action Required**
+  
+  You have a **25-minute confirmation window** starting from your shift's begin time. If you don't confirm within this window, your reservation will be **automatically canceled** with the reason "! Usuario no confirmo!".
+</Warning>
+
+## Confirmation Windows by Shift
+
+| Shift | Start Time | Confirmation Window | Deadline |
+|-------|------------|---------------------|----------|
+| **Mañana (AM)** | 8:00 AM | 8:00 AM – 8:25 AM | 8:25 AM |
+| **Tarde (PM)** | 1:00 PM | 1:00 PM – 1:25 PM | 1:25 PM |
+| **Día completo** | 8:00 AM | 8:00 AM – 8:25 AM | 8:25 AM |
+
+<Note>
+  For **full day** reservations, you only need to confirm once during the morning window (8:00 AM – 8:25 AM).
+</Note>
+
+## Geolocation Requirements
+
+The system verifies that you are **physically present** at the coworking space using your device's GPS location.
+
+### Location Details
+
+- **Workplace coordinates**: Crepe-Working 1 (4.74488, -74.04483)
+- **Required proximity**: Within **1,000 meters** (1 km) of the workplace
+- **Technology used**: GPS geolocation (Haversine formula for distance calculation)
+
+<Tip>
+  The system shows your current distance in the User Panel. For example: **"Estás dentro del perímetro (245 m)"** means you're 245 meters from the workplace and eligible to confirm.
+</Tip>
+
+## Step-by-Step: Confirming Your Reservation
+
+<Steps>
+  <Step title="Enable Location Services">
+    Before you can confirm, your device must allow location access.
+    
+    **On iOS (iPhone/iPad):**
+    1. Open **Settings**
+    2. Find and tap **Safari** (or your browser)
+    3. Tap **Location**
+    4. Select **"Permitir"** (Allow) or **"Permitir al usar la app"**
+    5. Reload the page
+    
+    **On Android:**
+    1. Open **Settings**
+    2. Go to **Applications** or **Apps**
+    3. Find your browser (Chrome, Firefox, Edge)
+    4. Tap **Permissions**
+    5. Tap **Location** and select **"Permitir"** (Allow)
+    6. Reload the page
+    
+    **On Desktop:**
+    1. Click the **padlock icon** (🔒) in the address bar
+    2. Find **"Location"** in the menu
+    3. Select **"Allow"** or **"Ask"**
+    4. Reload the page and click **"Allow"** when prompted
+  </Step>
+
+  <Step title="Navigate to Your User Panel">
+    Click the **Armchair icon** in the top navigation bar to open your panel ("Mis Reservas").
+    
+    You'll see:
+    - Your profile information
+    - Quick summary of reservations (Pendientes, Confirmadas, Canceladas)
+    - **"Confirmación por ubicación"** section showing your current status
+  </Step>
+
+  <Step title="Check Your Location Status">
+    The User Panel displays your proximity status:
+    
+    ✅ **"Estás dentro del perímetro ([distance] m)"**
+    - You are within range and can confirm
+    - Distance shown in meters (e.g., 245 m)
+    
+    ⚠️ **"Para confirmar, debes estar dentro del perímetro de 1000 m"**
+    - You are too far away
+    - Move closer to the workplace and tap **"Actualizar ubicación"**
+    
+    <Tip>
+      Click **"Actualizar ubicación"** (Update Location) to refresh your GPS position. This is useful if you just arrived at the workplace.
+    </Tip>
+  </Step>
+
+  <Step title="Wait for Your Confirmation Window">
+    Reservations can only be confirmed **on the day of the booking** and **within the 25-minute window**.
+    
+    If you try to confirm too early, you'll see:
+    - **"La confirmación para este turno inicia a las [time]"**
+    
+    If you try after the deadline:
+    - **"La ventana de confirmación terminó a las [time]"**
+    
+    The panel shows: **"Ventana activa: quedan [X] min"** when the window is open.
+  </Step>
+
+  <Step title="Confirm Your Reservation">
+    Find your pending reservation in the list and click the **green "Confirmar"** button.
+    
+    **On Mobile:**
+    1. Tap the reservation card to expand it
+    2. Verify the desk, date, and shift details
+    3. Tap the green **"Confirmar"** button
+    
+    **On Desktop:**
+    1. Find the reservation row in the table
+    2. Click the **"Confirmar"** button in the "Acción" column
+    
+    The system will:
+    1. Verify you're within the time window
+    2. Check your GPS location
+    3. Calculate distance to the workplace
+    4. Update the reservation status
+  </Step>
+
+  <Step title="Receive Confirmation">
+    If successful, you'll see an alert:
+    
+    **"Asistencia confirmada. Distancia: [X] metros."**
+    
+    The reservation status changes from **"Pendiente"** to **"Confirmada"** with a green badge.
+    
+    The system saves verification details including:
+    - Confirmation timestamp
+    - Your GPS coordinates
+    - Distance to workplace (in meters)
+    - Verification type: `confirmacion-manual-geolocalizada`
+  </Step>
+</Steps>
+
+## Understanding Confirmation States
+
+Each reservation has one of three states:
+
+### 🟡 Pendiente (Pending)
+
+- **Initial state** after booking
+- **Action required**: Confirm during the 25-minute window
+- **Badge color**: Yellow/gold background
+- **What happens**: Auto-cancels if not confirmed by deadline
+
+### 🟢 Confirmada (Confirmed)
+
+- **Final state** after successful verification
+- **Badge color**: Green background
+- **Cannot be changed**: Once confirmed, the reservation is locked
+- **Verification message saved**: Shows confirmation timestamp and distance
+
+### 🔴 Cancelada (Canceled)
+
+- **Badge color**: Red background
+- **Reasons for cancellation**:
+  - Manual cancellation by user
+  - Auto-cancellation: **"! Usuario no confirmo!"** (missed deadline)
+  - Admin cancellation with custom reason
+
+## Troubleshooting Location Issues
+
+### "Permiso de ubicación denegado"
+
+**Cause**: Location permission was denied.
+
+**Solution**: Follow the instructions in Step 1 to enable location services, then reload the page.
+
+---
+
+### "Ubicación no disponible"
+
+**Cause**: Your device cannot determine your location (no GPS signal, WiFi disabled).
+
+**Solution**:
+- Enable **GPS** on your device
+- Connect to **WiFi** for better positioning
+- Move to a location with better signal (near a window, outside)
+- Ensure **Location Services** are enabled system-wide
+
+---
+
+### "Tiempo de espera agotado"
+
+**Cause**: GPS took too long to respond (timeout after 15 seconds).
+
+**Solution**:
+- Check your internet connection
+- Enable GPS/Location Services
+- Tap **"Actualizar ubicación"** to retry
+- Try again from a location with better signal
+
+---
+
+### "Estás a [X] metros del punto. Debes estar dentro de 1000 metros..."
+
+**Cause**: You are more than 1 km away from the workplace.
+
+**Solution**:
+- **Physical solution**: Travel to the coworking space before confirming
+- **Check distance**: The message shows your current distance
+- **Update location**: After arriving, click "Actualizar ubicación"
+
+---
+
+### "La geolocalización no está soportada en este navegador"
+
+**Cause**: Your browser is outdated or doesn't support geolocation.
+
+**Solution**: Use a modern browser:
+- ✅ Chrome (recommended)
+- ✅ Firefox
+- ✅ Safari
+- ✅ Edge
+- Update your browser to the latest version
+
+## Admin Override
+
+Administrators can confirm reservations **manually without location verification**:
+
+- No time window restriction
+- No location requirement
+- Verification type: `confirmacion-admin-manual`
+- Message saved: **"Reserva confirmada por administrador"**
+
+<Note>
+  If you're an admin, you'll see a note in your User Panel: **"Puedes confirmar manualmente cualquier reserva pendiente, incluso fuera de la ventana de 25 minutos."**
+</Note>
+
+## What Happens If You Don't Confirm?
+
+If you don't confirm within the 25-minute window:
+
+1. **Auto-cancellation** runs after the deadline
+2. Status changes to **"Cancelada"**
+3. Cancellation reason: **"! Usuario no confirmo!"**
+4. The desk becomes available for others
+5. You can make a new reservation for a future date
+
+<Warning>
+  There is **no grace period**. The 25-minute window is strict. For example, if your shift starts at 8:00 AM, you must confirm by 8:25 AM exactly.
+</Warning>
+
+## Privacy and Data
+
+The system stores the following information when you confirm:
+
+- **Timestamp** of confirmation (ISO format)
+- **GPS coordinates** (latitude, longitude)
+- **Distance** to workplace in meters
+- **Accuracy** of GPS reading (if available)
+- **Verification type** (manual vs. admin)
+
+This data is used **only** for attendance verification and is not shared externally.
+
+## Tips for Smooth Confirmation
+
+<Tip>
+  **Arrive 10 minutes early** – This gives you time to enable location services, find a good GPS signal, and confirm comfortably within the window.
+</Tip>
+
+<Tip>
+  **Check your location status beforehand** – Visit the User Panel 5 minutes before your shift to see if you're within range.
+</Tip>
+
+<Tip>
+  **Enable GPS and WiFi** – Both improve location accuracy. GPS alone may be less accurate indoors.
+</Tip>
+
+<Tip>
+  **Use a modern browser** – Chrome and Edge have the best geolocation support across devices.
+</Tip>
+
+<Tip>
+  **Save your browser permissions** – Allow location access permanently to avoid re-enabling it each time.
+</Tip>
+
+## Next Steps
+
+After confirming your attendance:
+
+- Your reservation is **locked** and cannot be changed
+- Use your assigned desk for the entire shift
+- Review [Managing Reservations](/user-guide/managing-reservations) to learn how to view and cancel future bookings

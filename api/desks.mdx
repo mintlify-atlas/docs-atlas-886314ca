@@ -1,0 +1,373 @@
+---
+title: Desks API
+description: Manage desk positions and workspaces
+---
+
+## Overview
+
+The desk management system handles individual desk positions (`working-puestos`) and rooms (`working-salas`). Each desk belongs to a room and can be assigned specific features like monitors.
+
+## Desk Positions (Puestos)
+
+Desk positions are typically numbered 1-6 in the current system.
+
+### Desk Configuration
+
+Some desks have special features:
+
+```javascript
+// Desks with monitors
+const CON_MONITOR = [1, 3, 6];
+```
+
+### Desk Layout
+
+```javascript
+const SILLAS = [
+  { id: 1, top: '-5%',  left: '0%',   rotate: '-15deg' },
+  { id: 2, top: '-25%', left: '45%',  rotate: '25deg'  },
+  { id: 3, top: '-25%', left: '70%',  rotate: '-20deg' },
+  { id: 4, top: '95%',  left: '0%',   rotate: '210deg' },
+  { id: 5, top: '75%',  left: '40%',  rotate: '180deg' },
+  { id: 6, top: '75%',  right: '15%', rotate: '210deg' },
+];
+```
+
+## Get Desk Status
+
+Check desk availability for a specific date.
+
+### Calculate Desk State
+
+```javascript
+// Desk states: 'disponible', 'limitado', 'ocupado'
+const calcEstado = (reservas, puestoId) => {
+  const rp = reservas.filter(r => 
+    getPuestoId(r) === puestoId && 
+    esReservaActiva(r)
+  );
+  
+  const tieneAM = rp.some(r => getHorarioId(r) === 1);
+  const tienePM = rp.some(r => getHorarioId(r) === 2);
+  const tieneCompleto = rp.some(r => getHorarioId(r) === 3);
+  
+  if (tieneCompleto || (tieneAM && tienePM)) return 'ocupado';
+  if (tieneAM || tienePM) return 'limitado';
+  return 'disponible';
+};
+```
+
+**States:**
+- `disponible` - Desk is completely free
+- `limitado` - Desk is reserved for one shift (morning or afternoon)
+- `ocupado` - Desk is fully booked
+
+### Get Available Desks
+
+```javascript
+import { getEscritoriosDisponibles } from './utils/reservasService';
+
+// Get available desk IDs for a date
+const availableDesks = await getEscritoriosDisponibles('2026-03-15');
+// Returns: [1, 2, 4, 5] (array of available desk IDs)
+```
+
+**Implementation:**
+
+```javascript
+export const getEscritoriosDisponibles = async (fecha) => {
+  const reservas = await getReservas({ fecha });
+  const activas = reservas.filter((reserva) => 
+    reserva.estado === 'Pendiente' || 
+    reserva.estado === 'Confirmada'
+  );
+  
+  const ocupados = activas
+    .map((reserva) => Number(reserva.escritorioId))
+    .filter((id) => !Number.isNaN(id));
+  
+  return [1, 2, 3, 4, 5, 6].filter((id) => !ocupados.includes(id));
+};
+```
+
+## Rooms (Salas)
+
+Rooms are workspaces that contain multiple desks.
+
+### Endpoint
+
+```
+GET /api/working-salas
+```
+
+Base URL: `https://macfer.crepesywaffles.com`
+
+### Request
+
+```http
+GET /api/working-salas?populate=foto&sort=id:asc
+```
+
+### Query Parameters
+
+<ParamField query="populate" type="string">
+  Populate the `foto` field to get room images
+</ParamField>
+
+<ParamField query="sort" type="string">
+  Sort results (e.g., `id:asc`)
+</ParamField>
+
+### Response
+
+<ResponseField name="data" type="array">
+  Array of room objects
+  
+  <ResponseField name="id" type="number">
+    Unique room identifier
+  </ResponseField>
+  
+  <ResponseField name="attributes" type="object">
+    Room data
+    
+    <ResponseField name="nombre" type="string">
+      Room name
+    </ResponseField>
+    
+    <ResponseField name="capacidad" type="number">
+      Total number of desk positions in the room
+    </ResponseField>
+    
+    <ResponseField name="monitores" type="number">
+      Number of desks with monitors
+    </ResponseField>
+    
+    <ResponseField name="disponible" type="boolean">
+      Whether the room is available for reservations
+    </ResponseField>
+    
+    <ResponseField name="foto" type="object">
+      Room image media
+      
+      <ResponseField name="data" type="array">
+        Array of media objects
+        
+        <ResponseField name="attributes" type="object">
+          <ResponseField name="url" type="string">
+            Image URL (relative or absolute)
+          </ResponseField>
+        </ResponseField>
+      </ResponseField>
+    </ResponseField>
+  </ResponseField>
+</ResponseField>
+
+### Example Response
+
+```json
+{
+  "data": [
+    {
+      "id": 1,
+      "attributes": {
+        "nombre": "Sala Principal",
+        "capacidad": 6,
+        "monitores": 3,
+        "disponible": true,
+        "foto": {
+          "data": [
+            {
+              "id": 1,
+              "attributes": {
+                "url": "/uploads/sala1.jpg",
+                "name": "sala1.jpg",
+                "width": 800,
+                "height": 600
+              }
+            }
+          ]
+        },
+        "createdAt": "2026-03-01T10:00:00.000Z",
+        "updatedAt": "2026-03-01T10:00:00.000Z"
+      }
+    }
+  ]
+}
+```
+
+### Normalize Room Data
+
+```javascript
+const normalizeSala = (item) => {
+  const a = item.attributes ?? item;
+  
+  // Extract image URL
+  let imagenUrl = null;
+  const fotoArr = a.foto?.data;
+  if (Array.isArray(fotoArr) && fotoArr.length > 0) {
+    const url = fotoArr[0].attributes?.url;
+    if (url) {
+      imagenUrl = url.startsWith('http') 
+        ? url 
+        : `https://macfer.crepesywaffles.com${url}`;
+    }
+  }
+  
+  return {
+    id: item.id,
+    nombre: a.nombre ?? a.name ?? `Sala ${item.id}`,
+    capacidad: a.capacidad ?? 0,
+    monitores: a.monitores ?? 0,
+    imagen: imagenUrl,
+    disponible: a.disponible !== false,
+    ruta: '/reservas',
+  };
+};
+```
+
+## Working with Desk Relations
+
+Reservations link to desks through the `working_puestos` relation.
+
+### Extract Desk ID from Reservation
+
+```javascript
+const extractId = (rel) => {
+  if (rel === null || rel === undefined) return null;
+  if (typeof rel === 'number') return rel;
+  if (typeof rel === 'object' && rel.id !== undefined) return rel.id;
+  
+  if (rel.data !== null && rel.data !== undefined) {
+    const d = rel.data;
+    if (typeof d === 'number') return d;
+    if (Array.isArray(d) && d.length > 0) return d[0].id ?? null;
+    if (typeof d === 'object' && d.id !== undefined) return d.id;
+  }
+  
+  return null;
+};
+
+const getPuestoId = (reserva) => {
+  return (
+    extractId(reserva.attributes?.working_puestos) ??
+    extractId(reserva.working_puestos) ??
+    null
+  );
+};
+```
+
+### Get Room Information from Reservation
+
+```javascript
+const getSalaInfo = (reserva) => {
+  const puestosData = reserva.attributes?.working_puestos?.data;
+  const pAttr = Array.isArray(puestosData)
+    ? puestosData[0]?.attributes
+    : puestosData?.attributes ?? null;
+    
+  const salaData = pAttr?.working_sala?.data;
+  
+  if (salaData) {
+    return {
+      salaId: salaData.id ?? null,
+      salaNombre: salaData.attributes?.nombre ?? `Sala ${salaData.id}`,
+    };
+  }
+  
+  return { salaId: null, salaNombre: null };
+};
+```
+
+## Desk Features
+
+### Check if Desk Has Monitor
+
+```javascript
+const CON_MONITOR = [1, 3, 6];
+
+const tieneMonitor = CON_MONITOR.includes(escritorioId);
+```
+
+### Display Desk Features
+
+```jsx
+<div className="booking-ubicacion-row">
+  <Ticket size={16} strokeWidth={2.5} color="#503629" />
+  <span className="booking-escritorio-nombre">
+    Escritorio {escritorioId}
+  </span>
+  {tieneMonitor && (
+    <span className="booking-badge-monitor">
+      Con monitor
+    </span>
+  )}
+</div>
+```
+
+## Fetch Desk Metadata
+
+Get all desk positions from the geolocation service:
+
+```javascript
+import { fetchWorkingPuestos } from './utils/geolocationService';
+
+// Get all desks (with caching)
+const puestos = await fetchWorkingPuestos();
+
+// Force refresh
+const puestos = await fetchWorkingPuestos({ force: true });
+```
+
+**Returns:**
+
+```javascript
+[
+  {
+    id: 1,
+    nombre: 'escritorio1',
+    estado: false,
+    puestoNumero: 1
+  },
+  // ...
+]
+```
+
+## Blocked Shifts
+
+Check which shifts are blocked for a desk:
+
+```javascript
+const turnosBloqueados = (reservas, puestoId) => {
+  const bloq = new Set();
+  
+  reservas
+    .filter(r => getPuestoId(r) === puestoId && esReservaActiva(r))
+    .forEach(r => {
+      const hId = getHorarioId(r);
+      if (hId === 1) { // Morning
+        bloq.add(1);
+        bloq.add(3); // Full day also blocked
+      } else if (hId === 2) { // Afternoon
+        bloq.add(2);
+        bloq.add(3);
+      } else if (hId === 3) { // Full day
+        bloq.add(1);
+        bloq.add(2);
+        bloq.add(3);
+      }
+    });
+  
+  return bloq;
+};
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Reservations API" icon="calendar-check" href="/api/reservations">
+    Create and manage reservations
+  </Card>
+  <Card title="Schedules API" icon="clock" href="/api/schedules">
+    Work with time schedules
+  </Card>
+</CardGroup>

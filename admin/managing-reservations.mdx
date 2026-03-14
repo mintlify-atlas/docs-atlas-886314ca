@@ -1,0 +1,240 @@
+---
+title: 'Managing Reservations'
+description: 'Admin tools for confirming, canceling, and reactivating reservations'
+---
+
+## Overview
+
+Administrators have enhanced reservation management capabilities that bypass standard user restrictions. This includes manual confirmation without location or time constraints, and the ability to reactivate canceled reservations.
+
+## Admin Tabs
+
+The admin panel provides three filtering tabs for viewing reservations:
+
+```javascript
+{
+  { key: 'todos',  label: 'Todas' },
+  { key: 'mis',    label: 'Mis reservas' },
+  { key: 'otros',  label: 'Otras' },
+}
+```
+
+**Source:** `Panel.jsx:1032-1036`
+
+### Tab Filtering Logic
+
+```javascript
+if (esAdmin) {
+  if (adminTab === 'mis') result = result.filter(r => r.documento === documentoUsuario);
+  else if (adminTab === 'otros') result = result.filter(r => r.documento !== documentoUsuario);
+}
+```
+
+**Source:** `Panel.jsx:807-810`
+
+- **Todas** - Shows all reservations from all users
+- **Mis reservas** - Shows only the admin's own reservations
+- **Otras** - Shows reservations created by other users
+
+## Manual Confirmation
+
+### How It Works
+
+Admins can confirm any pending reservation without the standard restrictions that apply to regular users:
+
+```javascript
+if (esAdmin) {
+  setConfirmando(id);
+  try {
+    const mensaje = 'Reserva confirmada por administrador.';
+
+    await updateReservaWithVerification(id, {
+      estado: 'Confirmada',
+      confirmada: true,
+      verificacionAsistencia: {
+        fecha: new Date().toISOString(),
+        mensaje,
+        tipo: 'confirmacion-admin-manual',
+        autorizadaPor: documentoUsuario,
+        nombreAutorizador: datosEmpleado?.nombre ?? 'Administrador',
+      },
+    }, reservaAux);
+    
+    // ... state update
+    alert('Reserva confirmada por administrador.');
+  } catch (err) {
+    console.error(err);
+    alert(err?.message || 'Error al confirmar la reserva.');
+  } finally {
+    setConfirmando(null);
+  }
+  return;
+}
+```
+
+**Source:** `Panel.jsx:557-602`
+
+### Verification Record
+
+When an admin confirms a reservation, the system records:
+
+- **tipo**: `'confirmacion-admin-manual'`
+- **autorizadaPor**: Admin's document number
+- **nombreAutorizador**: Admin's name
+- **fecha**: Timestamp of confirmation
+- **mensaje**: `'Reserva confirmada por administrador.'`
+
+### User Experience
+
+For admins, pending reservations show a helper message:
+
+```javascript
+helperMessage={esAdmin && r.estado === 'Pendiente'
+  ? (r.documento === documentoUsuario
+      ? 'Puedes confirmar esta reserva como administrador.'
+      : 'Puedes confirmar manualmente esta reserva como administrador.')
+  : ''}
+```
+
+**Source:** `Panel.jsx:1156-1160`
+
+## Reactivating Canceled Reservations
+
+### Reactivation Function
+
+Only admins can reactivate canceled reservations:
+
+```javascript
+const handleReactivar = async (id) => {
+  if (!esAdmin) return;
+
+  const reservaAux = reservations.find(r => r.id === id);
+  if (!reservaAux || reservaAux.estado !== 'Cancelada') {
+    return;
+  }
+
+  setReactivando(id);
+  try {
+    await updateReservaWithVerification(id, {
+      estado: 'Pendiente',
+      confirmada: null,
+      motivoCancelacion: null,
+      motivo_cancelacion: null,
+      verificacionAsistencia: {
+        fecha: new Date().toISOString(),
+        mensaje: 'Reserva reactivada por administrador.',
+        tipo: 'reactivacion-admin',
+        autorizadaPor: documentoUsuario,
+        nombreAutorizador: datosEmpleado?.nombre ?? 'Administrador',
+      },
+    }, reservaAux);
+
+    // ... state update
+    alert('Reserva reactivada.');
+  } catch (err) {
+    console.error(err);
+    alert(err?.message || 'Error al reactivar la reserva.');
+  } finally {
+    setReactivando(null);
+  }
+};
+```
+
+**Source:** `Panel.jsx:674-726`
+
+### Reactivation Button
+
+The reactivation button only appears for admins viewing canceled reservations:
+
+```javascript
+{showOwner && esCancelada && (
+  <button
+    onClick={() => onReactivar(r.id)}
+    disabled={reactivando === r.id || cancelando === r.id || confirmando === r.id}
+    style={{
+      width: "100%",
+      display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
+      padding: "8px", borderRadius: "8px",
+      border: "1px solid rgba(204,138,34,0.35)",
+      background: "rgba(204,138,34,0.1)",
+      color: "#8A6D3B", fontSize: "0.8rem", fontWeight: 700,
+      cursor: reactivando === r.id || cancelando === r.id || confirmando === r.id ? "not-allowed" : "pointer",
+      opacity: reactivando === r.id || cancelando === r.id || confirmando === r.id ? 0.6 : 1,
+      fontFamily: "inherit",
+    }}
+  >
+    {reactivando === r.id ? "Reactivando…" : "Reactivar"}
+  </button>
+)}
+```
+
+**Source:** `Panel.jsx:324-343`
+
+## Search and Filtering
+
+### Admin Search Capabilities
+
+Admins have enhanced search functionality:
+
+```javascript
+placeholder={esAdmin ? "Buscar por ID, nombre, cédula…" : "Buscar por ID de reserva…"}
+```
+
+**Source:** `Panel.jsx:1103`
+
+Search filters include:
+- Reservation ID
+- User's full name (`nombreCompleto`)
+- User's short name (`nombre`)
+- Document number (`documento`)
+- Desk ID (`puestoId`)
+
+```javascript
+if (searchQuery.trim()) {
+  const q = searchQuery.trim().toLowerCase();
+  result = result.filter(r =>
+    String(r.id).includes(q) ||
+    (r.nombreCompleto ?? '').toLowerCase().includes(q) ||
+    (r.nombre ?? '').toLowerCase().includes(q) ||
+    (r.documento ?? '').toLowerCase().includes(q) ||
+    String(r.puestoId ?? '').includes(q)
+  );
+}
+```
+
+**Source:** `Panel.jsx:816-825`
+
+### Filter Options
+
+Admins can combine multiple filters:
+
+1. **Estado (Status)**: Todos, Pendiente, Confirmada, Cancelada
+2. **Sala (Room)**: Filter by specific rooms
+3. **Admin Tabs**: Todas, Mis reservas, Otras
+4. **Search Query**: Free text search
+
+## User Information Display
+
+When viewing all reservations, admins see additional user information:
+
+```javascript
+{esAdmin && (
+  <td style={{ padding: "12px 12px" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+      <span className="text-body" style={{ fontSize: "0.82rem", fontWeight: 700 }}>
+        {r.nombreCompleto || r.nombre}
+      </span>
+      <span style={{ fontSize: "0.72rem", color: "#92614F" }}>
+        {r.documento || 'Sin documento'}
+      </span>
+    </div>
+  </td>
+)}
+```
+
+**Source:** `Panel.jsx:1220-1231`
+
+This includes:
+- Full name of the reservation owner
+- Document number
+- Profile photo (in mobile view)

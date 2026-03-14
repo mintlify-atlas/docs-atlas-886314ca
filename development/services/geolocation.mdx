@@ -1,0 +1,498 @@
+---
+title: "Geolocation Service"
+description: "GPS verification, distance calculation, and time-based reservation validation"
+---
+
+## Overview
+
+The Geolocation Service provides GPS-based location verification, distance calculations using the Haversine formula, time-window validation for reservations, and device/browser detection for permission handling.
+
+**Location**: `src/utils/geolocationService.js`
+
+## Configuration
+
+```javascript
+const WORKPLACE_COORDS = {
+  latitude: 4.74488,
+  longitude: -74.04483,
+  name: 'Crepe-Working 1'
+};
+
+const ALLOWED_RADIUS_METERS = 1000;
+const VERIFICATION_WINDOW_MINUTES = 25;
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+```
+
+## Core Functions
+
+### Distance Calculation
+
+#### `calculateDistance(lat1, lon1, lat2, lon2)`
+
+Calculates the distance between two geographic coordinates using the Haversine formula.
+
+**Parameters:**
+- `lat1` (number): Latitude of point 1
+- `lon1` (number): Longitude of point 1
+- `lat2` (number): Latitude of point 2
+- `lon2` (number): Longitude of point 2
+
+**Returns:** `number` - Distance in meters
+
+**Implementation:**
+```javascript
+export const calculateDistance = (lat1, lon1, lat2, lon2) => {
+  const R = 6371e3; // Earth radius in meters
+  const φ1 = (lat1 * Math.PI) / 180;
+  const φ2 = (lat2 * Math.PI) / 180;
+  const Δφ = ((lat2 - lat1) * Math.PI) / 180;
+  const Δλ = ((lon2 - lon1) * Math.PI) / 180;
+
+  const a =
+    Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+    Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+  
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  const distance = R * c;
+
+  return distance;
+};
+```
+
+#### `isWithinRadius(userLat, userLon)`
+
+Verifies if a coordinate is within the allowed radius from the workplace.
+
+**Parameters:**
+- `userLat` (number): User's latitude
+- `userLon` (number): User's longitude
+
+**Returns:** `boolean` - `true` if within the allowed radius (1000m)
+
+**Example:**
+```javascript
+const isNearby = isWithinRadius(4.7450, -74.0450);
+console.log(`Distance: ${distance.toFixed(2)} meters`);
+// Output: Distance: 150.23 meters
+```
+
+### Location Permissions
+
+#### `checkLocationPermission()`
+
+Checks the current state of geolocation permissions.
+
+**Returns:** `Promise<string>` - Permission state:
+- `'granted'`: Permission granted
+- `'denied'`: Permission denied
+- `'prompt'`: Will prompt user
+- `'unsupported'`: Permissions API not available (e.g., iOS Safari)
+
+**Implementation:**
+```javascript
+export const checkLocationPermission = async () => {
+  try {
+    if (!navigator.permissions) {
+      console.warn('API de permisos no disponible');
+      return 'unsupported';
+    }
+
+    const result = await navigator.permissions.query({ name: 'geolocation' });
+    console.log('Estado de permiso:', result.state);
+    return result.state;
+  } catch (error) {
+    console.warn('Error al verificar permisos:', error);
+    return 'unsupported';
+  }
+};
+```
+
+#### `requestLocationPermission()`
+
+Requests location permission explicitly from the user.
+
+**Returns:** `Promise<boolean>` - `true` if permission granted
+
+#### `getCurrentPosition()`
+
+Obtains the user's current GPS position with high accuracy.
+
+**Returns:** `Promise<Object>` - Position object:
+```javascript
+{
+  latitude: number,
+  longitude: number,
+  accuracy: number,
+  altitude: number | null,
+  altitudeAccuracy: number | null,
+  heading: number | null,
+  speed: number | null,
+  timestamp: number
+}
+```
+
+**Options:**
+```javascript
+const options = {
+  enableHighAccuracy: true,  // Use GPS if available
+  timeout: 15000,            // 15 seconds
+  maximumAge: 5000          // Accept positions up to 5 seconds old
+};
+```
+
+**Error Handling:**
+```javascript
+try {
+  const position = await getCurrentPosition();
+  console.log(`Lat: ${position.latitude}, Lon: ${position.longitude}`);
+  console.log(`Accuracy: ${position.accuracy}m`);
+} catch (error) {
+  console.error(error.message); // "Permiso de ubicación denegado"
+  console.error(error.details);  // Device-specific instructions
+  console.error(error.code);     // 1 = PERMISSION_DENIED
+}
+```
+
+### Reservation Time Validation
+
+#### `getVerificationTimeInfo(reserva, horarios, referenceDate)`
+
+Obtains detailed information about a reservation's verification time window.
+
+**Parameters:**
+- `reserva` (Object): Reservation object
+- `horarios` (Array): Available time slots
+- `referenceDate` (Date, optional): Reference date (defaults to now)
+
+**Returns:** `Object` - Verification info:
+```javascript
+{
+  scheduleResolved: boolean,
+  isToday: boolean,
+  isBefore: boolean,      // Before verification window
+  isActive: boolean,      // Within verification window
+  isPast: boolean,        // After verification window
+  startTime: string,      // "08:00"
+  endTime: string,        // "08:25"
+  shiftStartTime: string, // "08:00"
+  shiftEndTime: string,   // "12:00"
+  verificationStart: Date,
+  verificationEnd: Date,
+  shiftEnd: Date,
+  horario: Object,
+  message: string
+}
+```
+
+**Example:**
+```javascript
+const timeInfo = getVerificationTimeInfo(reserva, horarios);
+
+if (timeInfo.isActive) {
+  console.log("Within verification window!");
+  console.log(`Confirm between ${timeInfo.startTime} - ${timeInfo.endTime}`);
+} else if (timeInfo.isBefore) {
+  console.log(`Wait until ${timeInfo.startTime}`);
+} else if (timeInfo.isPast) {
+  console.log("Verification window closed");
+}
+```
+
+#### `isWithinVerificationTime(reserva, horarios, referenceDate)`
+
+Simple check if current time is within the verification window.
+
+**Returns:** `boolean` - `true` if within the 25-minute verification window
+
+#### `isPastVerificationDeadline(reserva, horarios, referenceDate)`
+
+Checks if the verification deadline has passed.
+
+**Returns:** `boolean` - `true` if past the deadline
+
+#### `isReservationForToday(fechaReserva, referenceDate)`
+
+Verifies if a reservation date matches today's date.
+
+**Parameters:**
+- `fechaReserva` (string): Date in ISO format (YYYY-MM-DD)
+- `referenceDate` (Date, optional): Reference date
+
+**Returns:** `boolean` - `true` if reservation is for today
+
+### Attendance Verification
+
+#### `verifyAttendance(reserva, options)`
+
+Verifies user attendance by checking both location and time constraints.
+
+**Parameters:**
+- `reserva` (Object): Reservation object
+- `options` (Object):
+  - `horarios` (Array, optional): Time slots
+  - `position` (Object, optional): Pre-fetched GPS position
+  - `referenceDate` (Date, optional): Reference date
+  - `workplaceInfo` (Object, optional): Custom workplace coordinates
+
+**Returns:** `Promise<Object>` - Verification result:
+```javascript
+{
+  success: boolean,
+  shouldUpdate: boolean,
+  newStatus: string,        // "Confirmada" | "Cancelada" | "Pendiente"
+  confirmed: boolean | null,
+  withinPerimeter: boolean,
+  message: string,
+  distance: number,
+  position: Object,
+  timeInfo: Object,
+  alertType: string        // "success" | "warning" | "error" | "info"
+}
+```
+
+**Example:**
+```javascript
+try {
+  const result = await verifyAttendance(reserva, {
+    horarios: await fetchWorkingHorarios()
+  });
+
+  if (result.success && result.withinPerimeter) {
+    console.log(`✅ ${result.message}`);
+    console.log(`Distance: ${result.distance.toFixed(0)}m`);
+    // Update reservation to "Confirmada"
+  } else {
+    console.warn(`⚠️ ${result.message}`);
+  }
+} catch (error) {
+  console.error("Verification failed:", error.message);
+}
+```
+
+#### `evaluateReservationStatus(reserva, horarios, referenceDate)`
+
+Evaluates if a pending reservation should be auto-canceled due to expired verification window.
+
+**Returns:** `Object` - Status evaluation:
+```javascript
+{
+  success: boolean,
+  shouldUpdate: boolean,
+  newStatus: string,
+  confirmed: boolean | null,
+  message: string,
+  timeInfo: Object,
+  alertType: string
+}
+```
+
+### Metadata Management
+
+#### `fetchWorkingPuestos(options)`
+
+Fetches available workstations from the API with 5-minute cache.
+
+**Parameters:**
+- `options` (Object):
+  - `force` (boolean): Bypass cache
+
+**Returns:** `Promise<Array>` - Array of workstations:
+```javascript
+[
+  {
+    id: number,
+    nombre: string,        // "escritorio1"
+    estado: boolean,
+    puestoNumero: number
+  }
+]
+```
+
+#### `fetchWorkingHorarios(options)`
+
+Fetches available time slots from the API with 5-minute cache.
+
+**Parameters:**
+- `options` (Object):
+  - `force` (boolean): Bypass cache
+
+**Returns:** `Promise<Array>` - Array of time slots:
+```javascript
+[
+  {
+    id: string,               // "manana" | "tarde" | "completo"
+    sourceId: number,
+    nombre: string,           // "Turno 1"
+    inicio: string,           // "08:00:00"
+    fin: string,              // "12:00:00"
+    startMinutes: number,     // 480
+    endMinutes: number,       // 720
+    verificationWindowMinutes: number,  // 25
+    verificationEndMinutes: number      // 505
+  }
+]
+```
+
+**Default Schedules:**
+```javascript
+const DEFAULT_HORARIOS = [
+  { id: 'manana', nombre: 'Turno 1', inicio: '08:00:00', fin: '12:00:00' },
+  { id: 'tarde', nombre: 'Turno 2', inicio: '12:00:00', fin: '17:00:00' },
+  { id: 'completo', nombre: 'Turno 3', inicio: '08:00:00', fin: '17:00:00' }
+];
+```
+
+### Device Detection
+
+#### `getDeviceInfo()`
+
+Detects the user's device type and browser.
+
+**Returns:** `Object` - Device information:
+```javascript
+{
+  isIOS: boolean,
+  isAndroid: boolean,
+  isMobile: boolean,
+  isDesktop: boolean,
+  browser: {
+    isSafari: boolean,
+    isChrome: boolean,
+    isFirefox: boolean,
+    isEdge: boolean,
+    name: string  // "Chrome" | "Safari" | "Firefox" | "Edge" | "Desconocido"
+  }
+}
+```
+
+#### `getPermissionInstructions()`
+
+Provides device-specific instructions for enabling location permissions.
+
+**Returns:** `Object`:
+```javascript
+{
+  title: string,
+  steps: string[]
+}
+```
+
+**Example:**
+```javascript
+const instructions = getPermissionInstructions();
+console.log(instructions.title);
+// "Cómo habilitar ubicación en iOS"
+
+instructions.steps.forEach((step, i) => {
+  console.log(`${i + 1}. ${step}`);
+});
+// 1. Abre Ajustes en tu iPhone/iPad
+// 2. Busca y toca "Safari" o tu navegador
+// ...
+```
+
+#### `checkGeolocationSupport()`
+
+Verifies if the device has geolocation capabilities.
+
+**Returns:** `Object`:
+```javascript
+{
+  supported: boolean,
+  hasPermissionsAPI: boolean,
+  isSecureContext: boolean,
+  warnings: string[]
+}
+```
+
+### Utility Functions
+
+#### `getWorkplaceInfo()`
+
+Returns the configured workplace location and radius.
+
+**Returns:** `Object`:
+```javascript
+{
+  latitude: 4.74488,
+  longitude: -74.04483,
+  name: 'Crepe-Working 1',
+  radius: 1000,
+  radiusKm: "1.00"
+}
+```
+
+## Exported Constants
+
+```javascript
+export const WORKPLACE_LOCATION = WORKPLACE_COORDS;
+export const VERIFICATION_RADIUS = ALLOWED_RADIUS_METERS;
+export const VERIFICATION_HOURS = {
+  windowMinutes: VERIFICATION_WINDOW_MINUTES
+};
+```
+
+## Complete Usage Example
+
+```javascript
+import {
+  checkLocationPermission,
+  requestLocationPermission,
+  getCurrentPosition,
+  verifyAttendance,
+  getVerificationTimeInfo,
+  fetchWorkingHorarios,
+  getDeviceInfo,
+  getPermissionInstructions
+} from '../utils/geolocationService';
+
+// Check and request permissions
+const permissionState = await checkLocationPermission();
+
+if (permissionState === 'denied') {
+  const instructions = getPermissionInstructions();
+  alert(instructions.steps.join('\n'));
+} else if (permissionState !== 'granted') {
+  const granted = await requestLocationPermission();
+  if (!granted) {
+    console.error('Permission denied');
+    return;
+  }
+}
+
+// Get device info
+const device = getDeviceInfo();
+console.log(`Device: ${device.isMobile ? 'Mobile' : 'Desktop'}`);
+console.log(`Browser: ${device.browser.name}`);
+
+// Load schedules
+const horarios = await fetchWorkingHorarios();
+
+// Check time window
+const timeInfo = getVerificationTimeInfo(reserva, horarios);
+if (!timeInfo.isActive) {
+  console.log(timeInfo.message);
+  return;
+}
+
+// Verify attendance
+try {
+  const result = await verifyAttendance(reserva, { horarios });
+  
+  if (result.success && result.shouldUpdate) {
+    console.log(`✅ ${result.message}`);
+    // Update reservation status to result.newStatus
+  } else {
+    console.warn(`⚠️ ${result.message}`);
+  }
+} catch (error) {
+  console.error('Verification error:', error.message);
+  console.error('Details:', error.details);
+}
+```
+
+## See Also
+
+- [Reservations Service](/development/services/reservations) - Manages reservation CRUD operations
+- [WebSocket Service](/development/services/websocket) - Real-time synchronization
+- [Panel Component](/development/components/panel) - Admin dashboard with geolocation verification

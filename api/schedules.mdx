@@ -1,0 +1,391 @@
+---
+title: Schedules API
+description: Manage work schedules and time slots
+---
+
+## Overview
+
+The schedules system (`working-horarios`) manages different time slots for desk reservations. The system supports three default schedules: morning, afternoon, and full day.
+
+## Endpoint
+
+```
+GET /api/working-horarios
+```
+
+Base URL: `https://macfer.crepesywaffles.com`
+
+## Schedule Types
+
+The system defines three schedule IDs:
+
+<ParamField query="id" type="number">
+  Schedule identifier:
+  - `1` - **Mañana** (Morning: 8:00 AM - 12:00 PM)
+  - `2` - **Tarde** (Afternoon: 1:00 PM - 5:00 PM)
+  - `3` - **Día completo** (Full day: 8:00 AM - 5:00 PM)
+</ParamField>
+
+### Schedule Metadata
+
+```javascript
+const HORARIO_META = {
+  1: { 
+    label: 'Mañana',
+    hora: '8:00 am – 12:00 m',
+    badge: 'AM',
+    badgeKey: 'am'
+  },
+  2: { 
+    label: 'Tarde',
+    hora: '1:00 pm – 5:00 pm',
+    badge: 'PM',
+    badgeKey: 'pm'
+  },
+  3: { 
+    label: 'Día completo',
+    hora: '8:00 am – 5:00 pm',
+    badge: 'Todo el día',
+    badgeKey: 'full'
+  },
+};
+```
+
+## Get Schedules
+
+Retrieve all available work schedules.
+
+### Request
+
+```http
+GET /api/working-horarios
+```
+
+### Response
+
+<ResponseField name="data" type="array">
+  Array of schedule objects
+  
+  <ResponseField name="id" type="number">
+    Schedule ID (1, 2, or 3)
+  </ResponseField>
+  
+  <ResponseField name="attributes" type="object">
+    Schedule data
+    
+    <ResponseField name="nombre" type="string">
+      Schedule name (e.g., "Turno 1", "Mañana")
+    </ResponseField>
+    
+    <ResponseField name="inicio" type="string">
+      Start time in HH:MM:SS format
+    </ResponseField>
+    
+    <ResponseField name="fin" type="string">
+      End time in HH:MM:SS format
+    </ResponseField>
+  </ResponseField>
+</ResponseField>
+
+### Example Response
+
+```json
+{
+  "data": [
+    {
+      "id": 1,
+      "attributes": {
+        "nombre": "Turno 1",
+        "inicio": "08:00:00",
+        "fin": "12:00:00",
+        "createdAt": "2026-03-01T10:00:00.000Z",
+        "updatedAt": "2026-03-01T10:00:00.000Z"
+      }
+    },
+    {
+      "id": 2,
+      "attributes": {
+        "nombre": "Turno 2",
+        "inicio": "13:00:00",
+        "fin": "17:00:00",
+        "createdAt": "2026-03-01T10:00:00.000Z",
+        "updatedAt": "2026-03-01T10:00:00.000Z"
+      }
+    },
+    {
+      "id": 3,
+      "attributes": {
+        "nombre": "Turno 3",
+        "inicio": "08:00:00",
+        "fin": "17:00:00",
+        "createdAt": "2026-03-01T10:00:00.000Z",
+        "updatedAt": "2026-03-01T10:00:00.000Z"
+      }
+    }
+  ]
+}
+```
+
+## Fetch Schedules from Service
+
+Use the helper function to get schedules with caching:
+
+```javascript
+import { fetchWorkingHorarios } from './utils/geolocationService';
+
+// Get schedules (with 5-minute cache)
+const horarios = await fetchWorkingHorarios();
+
+// Force refresh
+const horarios = await fetchWorkingHorarios({ force: true });
+```
+
+**Returns normalized schedule objects:**
+
+```javascript
+[
+  {
+    id: 'manana',
+    sourceId: 1,
+    nombre: 'Turno 1',
+    inicio: '08:00:00',
+    fin: '12:00:00',
+    startMinutes: 480,      // 8:00 AM in minutes
+    endMinutes: 720,        // 12:00 PM in minutes
+    verificationWindowMinutes: 25,
+    verificationEndMinutes: 505  // 8:25 AM
+  },
+  // ...
+]
+```
+
+## Verification Window
+
+Each schedule has a 25-minute verification window from the start time.
+
+<ParamField query="verificationWindowMinutes" type="number" default="25">
+  Time window (in minutes) after shift start when users can confirm their reservation
+</ParamField>
+
+### Verification Constants
+
+```javascript
+const VERIFICATION_WINDOW_MINUTES = 25;
+
+// Example: Morning shift (8:00 AM)
+// Verification window: 8:00 AM - 8:25 AM
+// After 8:25 AM, pending reservations are auto-cancelled
+```
+
+## Verification Time Info
+
+Get detailed verification timing for a reservation:
+
+```javascript
+import { getVerificationTimeInfo } from './utils/geolocationService';
+
+const timeInfo = getVerificationTimeInfo(reserva, horarios, new Date());
+
+console.log(timeInfo);
+// {
+//   scheduleResolved: true,
+//   isToday: true,
+//   isBefore: false,
+//   isActive: true,
+//   isPast: false,
+//   startTime: '08:00',
+//   endTime: '08:25',
+//   shiftStartTime: '08:00',
+//   shiftEndTime: '12:00',
+//   verificationStart: Date,
+//   verificationEnd: Date,
+//   shiftEnd: Date,
+//   horario: { ... },
+//   message: 'Puedes confirmar entre 08:00 y 08:25.'
+// }
+```
+
+<ResponseField name="scheduleResolved" type="boolean">
+  Whether the schedule was successfully resolved
+</ResponseField>
+
+<ResponseField name="isToday" type="boolean">
+  Whether the reservation is for today
+</ResponseField>
+
+<ResponseField name="isBefore" type="boolean">
+  Whether current time is before the verification window
+</ResponseField>
+
+<ResponseField name="isActive" type="boolean">
+  Whether the verification window is currently active
+</ResponseField>
+
+<ResponseField name="isPast" type="boolean">
+  Whether the verification window has passed
+</ResponseField>
+
+<ResponseField name="startTime" type="string">
+  Verification window start time (HH:MM)
+</ResponseField>
+
+<ResponseField name="endTime" type="string">
+  Verification window end time (HH:MM)
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  User-friendly message about verification status
+</ResponseField>
+
+## Extract Schedule from Reservation
+
+Get the schedule ID from a reservation object:
+
+```javascript
+const extractId = (rel) => {
+  if (rel === null || rel === undefined) return null;
+  if (typeof rel === 'number') return rel;
+  if (typeof rel === 'object' && rel.id !== undefined) return rel.id;
+  
+  if (rel.data !== null && rel.data !== undefined) {
+    const d = rel.data;
+    if (typeof d === 'number') return d;
+    if (Array.isArray(d) && d.length > 0) return d[0].id ?? null;
+    if (typeof d === 'object' && d.id !== undefined) return d.id;
+  }
+  
+  return null;
+};
+
+const getHorarioId = (reserva) => {
+  return (
+    extractId(reserva.attributes?.working_horarios) ??
+    extractId(reserva.working_horarios) ??
+    null
+  );
+};
+```
+
+## Schedule Display
+
+### Time Badge Component
+
+```jsx
+const TimeBadge = ({ time }) => {
+  if (time === 'am') {
+    return <span className="op-fila__turno op-fila__turno--am">AM</span>;
+  }
+  if (time === 'pm') {
+    return <span className="op-fila__turno op-fila__turno--pm">PM</span>;
+  }
+  return <span className="op-fila__turno op-fila__turno--full">Todo el día</span>;
+};
+```
+
+### Display Schedule in UI
+
+```jsx
+const hMeta = HORARIO_META[horarioId];
+
+<div className="booking-horario-btn booking-horario-btn--selected">
+  <span className="booking-horario-label">{hMeta?.label}</span>
+  <span className="booking-horario-hora">{hMeta?.hora}</span>
+</div>
+```
+
+## Time Utilities
+
+### Parse Time to Minutes
+
+```javascript
+const parseTimeToMinutes = (value) => {
+  // Parses "08:00:00" or "8:00 AM" to minutes since midnight
+  // Returns: 480 for 8:00 AM, 720 for 12:00 PM, etc.
+};
+```
+
+### Format Minutes to Time
+
+```javascript
+const formatMinutes = (totalMinutes) => {
+  const hours = String(Math.floor(totalMinutes / 60)).padStart(2, '0');
+  const minutes = String(totalMinutes % 60).padStart(2, '0');
+  return `${hours}:${minutes}`;
+};
+
+// Example:
+formatMinutes(480);  // "08:00"
+formatMinutes(505);  // "08:25"
+formatMinutes(1020); // "17:00"
+```
+
+## Schedule Conflicts
+
+When a desk has multiple reservations, certain schedule combinations block others:
+
+```javascript
+const turnosBloqueados = (reservas, puestoId) => {
+  const bloq = new Set();
+  
+  reservas
+    .filter(r => getPuestoId(r) === puestoId && esReservaActiva(r))
+    .forEach(r => {
+      const hId = getHorarioId(r);
+      
+      if (hId === 1) {        // Morning blocks full day
+        bloq.add(1);
+        bloq.add(3);
+      } else if (hId === 2) { // Afternoon blocks full day
+        bloq.add(2);
+        bloq.add(3);
+      } else if (hId === 3) { // Full day blocks everything
+        bloq.add(1);
+        bloq.add(2);
+        bloq.add(3);
+      }
+    });
+  
+  return bloq;
+};
+```
+
+**Conflict Rules:**
+- Morning reservation blocks: Morning + Full Day
+- Afternoon reservation blocks: Afternoon + Full Day
+- Full Day reservation blocks: All schedules
+
+## Auto-Cancellation
+
+Pending reservations are automatically cancelled if not confirmed within the verification window:
+
+```javascript
+const AUTO_CANCEL_REASON = '! Usuario no confirmo!';
+
+// Check if verification window has passed
+const isPast = timeInfo.isPast;
+
+if (isPast && reserva.estado === 'Pendiente') {
+  // Auto-cancel the reservation
+  await updateReservaWithVerification(reserva.id, {
+    estado: 'Cancelada',
+    confirmada: false,
+    motivoCancelacion: AUTO_CANCEL_REASON,
+    verificacionAsistencia: {
+      fecha: new Date().toISOString(),
+      mensaje: AUTO_CANCEL_REASON,
+      tipo: 'auto-cancelacion',
+    },
+  });
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Reservations API" icon="calendar-check" href="/api/reservations">
+    Create reservations with schedules
+  </Card>
+  <Card title="Users API" icon="users" href="/api/users">
+    User verification and permissions
+  </Card>
+</CardGroup>

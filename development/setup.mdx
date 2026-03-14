@@ -1,0 +1,161 @@
+---
+title: "Development Setup"
+description: "Set up your local development environment for Crepes & Waffles Coworking"
+---
+
+## Prerequisites
+
+Before you begin, ensure you have the following installed:
+
+- **Node.js** (v18 or higher)
+- **npm**, **pnpm**, or **yarn** package manager
+- **Git** for version control
+
+## Installation
+
+Clone the repository and install dependencies:
+
+<CodeGroup>
+```bash npm
+git clone <repository-url>
+cd crepe_working1
+npm install
+```
+
+```bash pnpm
+git clone <repository-url>
+cd crepe_working1
+pnpm install
+```
+
+```bash yarn
+git clone <repository-url>
+cd crepe_working1
+yarn install
+```
+</CodeGroup>
+
+## Dependencies
+
+The project uses the following key dependencies:
+
+### Core Framework
+- **React 19.2.0** - UI library
+- **React Router DOM 7.13.0** - Client-side routing
+- **Vite 7.3.1** - Build tool and dev server
+
+### UI & Styling
+- **Ant Design 6.3.1** - Component library
+- **Tailwind CSS 4.2.1** - Utility-first CSS framework
+- **Sass 1.97.3** - CSS preprocessor
+- **Lucide React** - Icon library
+- **React Icons** - Additional icon library
+
+### Utilities
+- **Axios 1.13.6** - HTTP client
+- **Day.js 1.11.19** - Date manipulation
+- **Three.js 0.183.1** - 3D graphics library
+
+### Development Tools
+- **ESLint 9.39.1** - Code linting
+- **Vite Plugin React** - React support for Vite
+
+## Available Scripts
+
+The following npm scripts are available in `package.json`:
+
+### Development Server
+
+Start the local development server with hot module replacement:
+
+<CodeGroup>
+```bash npm
+npm run dev
+```
+
+```bash pnpm
+pnpm dev
+```
+
+```bash yarn
+yarn dev
+```
+</CodeGroup>
+
+The application will be available at `http://localhost:5173` by default.
+
+### Production Build
+
+Build the application for production:
+
+<CodeGroup>
+```bash npm
+npm run build
+```
+
+```bash pnpm
+pnpm build
+```
+
+```bash yarn
+yarn build
+```
+</CodeGroup>
+
+Built files will be output to the `dist/` directory.
+
+### Lint Code
+
+Run ESLint to check code quality:
+
+<CodeGroup>
+```bash npm
+npm run lint
+```
+
+```bash pnpm
+pnpm lint
+```
+
+```bash yarn
+yarn lint
+```
+</CodeGroup>
+
+### Preview Production Build
+
+Preview the production build locally:
+
+<CodeGroup>
+```bash npm
+npm run preview
+```
+
+```bash pnpm
+pnpm preview
+```
+
+```bash yarn
+yarn preview
+```
+</CodeGroup>
+
+## Development Workflow
+
+1. **Start the dev server**: Run `npm run dev` to start developing
+2. **Make changes**: Edit files in the `src/` directory
+3. **Hot reload**: Changes will automatically reflect in the browser
+4. **Lint your code**: Run `npm run lint` before committing
+5. **Build for production**: Run `npm run build` to create optimized assets
+6. **Test production build**: Run `npm run preview` to verify the build
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Environment Variables" icon="gear" href="/development/environment-variables">
+    Configure environment variables for WebSocket and API connections
+  </Card>
+  <Card title="Project Structure" icon="folder-tree" href="/development/project-structure">
+    Understand the codebase organization and key directories
+  </Card>
+</CardGroup>

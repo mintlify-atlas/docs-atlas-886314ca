@@ -1,0 +1,857 @@
+---
+title: Panel Component
+description: Admin and user dashboard for managing reservations with geolocation-based confirmation and real-time updates
+---
+
+## Overview
+
+The **Panel** component (`Panel.jsx`) is the reservation management dashboard where users view, confirm, and cancel their bookings. Admins have extended capabilities to manage all reservations.
+
+### Key Features
+
+- **Dual-mode interface** (User vs Admin views)
+- **Geolocation-based confirmation** (within 1000m radius)
+- **Time-windowed verification** (25-minute confirmation window)
+- **Real-time synchronization** via custom hooks
+- **Advanced filtering** (state, room, search)
+- **Mobile-responsive** card layout
+- **Automatic cancellation** for unconfirmed reservations
+
+---
+
+## Component Structure
+
+### Main Component
+
+```jsx
+const Panel = () => {
+  // Located at: ~/workspace/source/src/assets/componentes/Panel.jsx
+}
+```
+
+### Sub-Components
+
+1. **ReservaCard** - Collapsible mobile reservation card
+2. **Desktop Table** - Full reservation table for larger screens
+3. **Profile Sidebar** - User info with quick stats
+4. **Filter Bar** - Search and filtering controls
+
+---
+
+## Constants
+
+### API Configuration
+
+```javascript
+const BASE         = 'https://macfer.crepesywaffles.com';
+const API_RESERVAS = `${BASE}/api/working-reservas`;
+const ADMINS = ['1028783377', '1019096266'];
+```
+
+### Shift Metadata
+
+```javascript
+const HORARIO_META = {
+  1: { label: 'Mañana',      hora: '8:00 am – 12:00 m' },
+  2: { label: 'Tarde',        hora: '1:00 pm – 5:00 pm' },
+  3: { label: 'Día completo', hora: '8:00 am – 5:00 pm' },
+};
+```
+
+---
+
+## State Management
+
+### Core State
+
+```javascript
+const [reservations, setReservations] = useState([]);        // All reservations
+const [loading,      setLoading]      = useState(true);      // Initial load
+const [error,        setError]        = useState("");        // Error message
+const [cancelando,   setCancelando]   = useState(null);      // Canceling reservation ID
+const [confirmando,  setConfirmando]  = useState(null);      // Confirming reservation ID
+const [reactivando,  setReactivando]  = useState(null);      // Reactivating reservation ID
+const [cancelConfirmId, setCancelConfirmId] = useState(null); // ID pending cancellation
+const [cancelReason, setCancelReason] = useState('');        // Cancellation reason
+const [cancelReasonError, setCancelReasonError] = useState(''); // Reason validation error
+```
+
+### Geolocation State
+
+```javascript
+const [isNearPoint,  setIsNearPoint]  = useState(false);     // Within radius?
+const [distanceMeters, setDistanceMeters] = useState(null);  // Distance in meters
+const [locationChecking, setLocationChecking] = useState(false); // Checking location
+const [locationError, setLocationError] = useState("");     // Location error
+const [nowMs, setNowMs] = useState(Date.now());              // Current timestamp
+```
+
+### Filter State (Admin)
+
+```javascript
+const [showAllReservations, setShowAllReservations] = useState(false); // Toggle today/all
+const [searchQuery, setSearchQuery] = useState('');          // Search text
+const [filterEstado, setFilterEstado] = useState('todos');   // State filter
+const [filterSala, setFilterSala] = useState('todas');       // Room filter
+const [adminTab, setAdminTab] = useState('todos');           // Admin tab (todos/mis/otros)
+```
+
+---
+
+## Key Functions
+
+### Load Reservations
+
+```javascript
+const cargarReservas = useCallback(async () => {
+  setLoading(true);
+  setError("");
+  try {
+    if (!documentoUsuario) {
+      setError("No se pudo identificar al usuario.");
+      return;
+    }
+
+    const filtroDocumento = esAdmin
+      ? ''
+      : `&filters[documento][$eq]=${encodeURIComponent(documentoUsuario)}`;
+    const filtroFecha = showAllReservations
+      ? ''
+      : `&filters[fecha_reserva][$eq]=${getLocalDateString()}`;
+
+    const url =
+      `${API_RESERVAS}` +
+      `?sort[0]=fecha_reserva:desc&sort[1]=id:desc` +
+      filtroDocumento +
+      filtroFecha +
+      `&populate[working_puestos][fields][0]=id&populate[working_puestos][fields][1]=nombre` +
+      `&populate[working_puestos][populate][working_sala][fields][0]=id` +
+      `&populate[working_puestos][populate][working_sala][fields][1]=nombre` +
+      `&populate[working_horarios][fields][0]=id&populate[working_horarios][fields][1]=nombre` +
+      `&pagination[pageSize]=40000`;
+
+    const res  = await fetch(url);
+    const json = await res.json();
+    const data = Array.isArray(json.data) ? json.data : [];
+
+    // Normalize each reservation
+    const normalizadas = data.map(r => {
+      const puestoId = getPuestoId(r);
+      const horarioId = getHorarioId(r);
+      const escritorioFallback = r.attributes?.escritorio;
+      const escritorioMatch = typeof escritorioFallback === 'string'
+        ? escritorioFallback.match(/\d+/)?.[0]
+        : null;
+      const { salaId, salaNombre } = getSalaInfo(r);
+
+      return {
+        id:       r.id,
+        nombre:   getNombreCorto(r.attributes?.Nombre ?? r.attributes?.documento ?? '—'),
+        nombreCompleto: getNombreCompleto(r.attributes?.Nombre ?? r.attributes?.documento ?? '—'),
+        foto:     r.attributes?.foto      ?? null,
+        documento:r.attributes?.documento ?? '—',
+        area:     r.attributes?.area      ?? '—',
+        fecha:    r.attributes?.fecha_reserva ?? '—',
+        estado:   getEstadoReserva(r.attributes),
+        confirmada: r.attributes?.estado === true,
+        pendiente: r.attributes?.estado === null,
+        cancelada: r.attributes?.estado === false,
+        motivoCancelacion: r.attributes?.motivo_cancelacion ?? r.attributes?.motivoCancelacion ?? null,
+        motivoGestion: r.attributes?.verificacionAsistencia?.mensaje ?? null,
+        verificacionAsistencia: r.attributes?.verificacionAsistencia ?? null,
+        puestoId: puestoId ?? (escritorioMatch ? Number(escritorioMatch) : null),
+        salaId,
+        salaNombre,
+        horarioId,
+        horario: r.attributes?.horario ?? null,
+        turno: r.attributes?.turno ?? null,
+        horaInicio: r.attributes?.horaInicio ?? null,
+        horaFin: r.attributes?.horaFin ?? null,
+        turnoLabel: getHorarioLabel(r, horarioId),
+      };
+    });
+
+    setReservations(normalizadas);
+  } catch (err) {
+    console.error(err);
+    setError("Error al cargar las reservas.");
+  } finally {
+    setLoading(false);
+  }
+}, [documentoUsuario, esAdmin, showAllReservations]);
+```
+
+### Confirmation Validation
+
+```javascript
+const getConfirmMeta = useCallback((reserva) => {
+  const timeInfo = getVerificationTimeInfo(reserva, [], new Date(nowMs));
+
+  if (!timeInfo.scheduleResolved) {
+    return {
+      canByTime: false,
+      blockedMessage: timeInfo.message || 'No se pudo validar el horario',
+      remainingMinutes: null,
+    };
+  }
+
+  if (!timeInfo.isToday) {
+    return {
+      canByTime: false,
+      blockedMessage: 'Solo puedes confirmar reservas del día de hoy.',
+      remainingMinutes: null,
+    };
+  }
+
+  if (!timeInfo.isActive) {
+    return {
+      canByTime: false,
+      blockedMessage: timeInfo.message || 'La ventana de confirmación no está activa.',
+      remainingMinutes: 0,
+    };
+  }
+
+  const remainingMinutes = timeInfo.verificationEnd
+    ? Math.max(0, Math.ceil((timeInfo.verificationEnd.getTime() - nowMs) / 60000))
+    : null;
+
+  return {
+    canByTime: true,
+    blockedMessage: '',
+    remainingMinutes,
+  };
+}, [nowMs]);
+```
+
+### Geolocation Refresh
+
+```javascript
+const refreshLocationStatus = useCallback(async (silent = false) => {
+  if (!geoSupport.supported) {
+    setLocationError('Tu navegador no soporta geolocalización.');
+    setIsNearPoint(false);
+    return;
+  }
+
+  if (!silent) {
+    setLocationChecking(true);
+  }
+
+  try {
+    const position = await getCurrentPosition();
+    const distance = calculateDistance(
+      position.latitude,
+      position.longitude,
+      workplaceInfo.latitude,
+      workplaceInfo.longitude
+    );
+
+    setDistanceMeters(distance);
+    setIsNearPoint(distance <= workplaceInfo.radius);
+    setLocationError('');
+  } catch (err) {
+    setLocationError(err?.message || 'No fue posible obtener tu ubicación.');
+    setIsNearPoint(false);
+  } finally {
+    if (!silent) {
+      setLocationChecking(false);
+    }
+  }
+}, [geoSupport.supported, workplaceInfo.latitude, workplaceInfo.longitude, workplaceInfo.radius]);
+```
+
+### Confirm Reservation
+
+```javascript
+const handleConfirmar = async (id) => {
+  const reservaAux = reservations.find(r => r.id === id);
+  if (!reservaAux || reservaAux.estado !== 'Pendiente') {
+    return;
+  }
+
+  // Admin bypass
+  if (esAdmin) {
+    setConfirmando(id);
+    try {
+      const mensaje = 'Reserva confirmada por administrador.';
+
+      await updateReservaWithVerification(id, {
+        estado: 'Confirmada',
+        confirmada: true,
+        verificacionAsistencia: {
+          fecha: new Date().toISOString(),
+          mensaje,
+          tipo: 'confirmacion-admin-manual',
+          autorizadaPor: documentoUsuario,
+          nombreAutorizador: datosEmpleado?.nombre ?? 'Administrador',
+        },
+      }, reservaAux);
+
+      setReservations((prev) =>
+        prev.map((r) =>
+          r.id === id
+            ? {
+                ...r,
+                estado: 'Confirmada',
+                confirmada: true,
+                verificacionAsistencia: {
+                  ...(r.verificacionAsistencia || {}),
+                  fecha: new Date().toISOString(),
+                  mensaje,
+                  tipo: 'confirmacion-admin-manual',
+                  autorizadaPor: documentoUsuario,
+                  nombreAutorizador: datosEmpleado?.nombre ?? 'Administrador',
+                },
+              }
+            : r
+        )
+      );
+
+      alert('Reserva confirmada por administrador.');
+    } catch (err) {
+      console.error(err);
+      alert(err?.message || 'Error al confirmar la reserva.');
+    } finally {
+      setConfirmando(null);
+    }
+    return;
+  }
+
+  // User confirmation with geolocation
+  const confirmMeta = getConfirmMeta(reservaAux);
+  if (!confirmMeta.canByTime) {
+    alert(confirmMeta.blockedMessage || 'La reserva no está en ventana de confirmación.');
+    return;
+  }
+
+  if (!isNearPoint) {
+    alert(`Debes estar dentro de ${workplaceInfo.radius} metros para confirmar la reserva.`);
+    return;
+  }
+
+  setConfirmando(id);
+  try {
+    const evaluation = await verifyAttendance(reservaAux, {
+      workplaceInfo,
+      referenceDate: new Date(nowMs),
+    });
+
+    if (!evaluation.shouldUpdate) {
+      alert(evaluation.message || 'La reserva no se puede confirmar en este momento.');
+      return;
+    }
+
+    const estadoNuevo = evaluation.newStatus;
+    const confirmadaNueva = estadoNuevo === 'Confirmada' ? true : estadoNuevo === 'Cancelada' ? false : null;
+    const motivoCancelacion = estadoNuevo === 'Cancelada' ? evaluation.message : null;
+
+    await updateReservaWithVerification(id, {
+      estado: estadoNuevo,
+      confirmada: confirmadaNueva,
+      motivoCancelacion,
+      motivo_cancelacion: motivoCancelacion,
+      verificacionAsistencia: {
+        fecha: new Date().toISOString(),
+        mensaje: evaluation.message,
+        distancia: evaluation.distance ?? null,
+        tipo: estadoNuevo === 'Confirmada' ? 'confirmacion-manual-geolocalizada' : 'auto-cancelacion',
+      },
+    }, reservaAux);
+
+    setReservations((prev) =>
+      prev.map((r) =>
+        r.id === id
+          ? {
+              ...r,
+              estado: estadoNuevo,
+              confirmada: confirmadaNueva,
+              motivoCancelacion,
+              verificacionAsistencia: {
+                ...(r.verificacionAsistencia || {}),
+                fecha: new Date().toISOString(),
+                mensaje: evaluation.message,
+                distancia: evaluation.distance ?? null,
+                tipo: estadoNuevo === 'Confirmada' ? 'confirmacion-manual-geolocalizada' : 'auto-cancelacion',
+              },
+            }
+          : r
+      )
+    );
+
+    alert(evaluation.message || (estadoNuevo === 'Confirmada' ? 'Reserva confirmada.' : 'Reserva actualizada.'));
+  } catch (err) {
+    console.error(err);
+    alert(err?.message || 'Error al confirmar la reserva.');
+  } finally {
+    setConfirmando(null);
+    void refreshLocationStatus(true);
+  }
+};
+```
+
+### Cancel Reservation
+
+```javascript
+const handleCancelar = async (id, motivoCancelacion) => {
+  setCancelando(id);
+  try {
+    const reservaAux = reservations.find(r => r.id === id);
+    await cancelReserva(id, reservaAux, motivoCancelacion);
+    
+    // Immediate local update
+    setReservations(prev =>
+      prev.map(r => r.id === id ? {
+        ...r,
+        estado: 'Cancelada',
+        confirmada: false,
+        motivoCancelacion,
+        verificacionAsistencia: {
+          ...(r.verificacionAsistencia || {}),
+          fecha: new Date().toISOString(),
+          mensaje: motivoCancelacion,
+          tipo: 'cancelacion-manual',
+        },
+      } : r)
+    );
+    
+    // Sync with API
+    await cargarReservas();
+  } catch (err) {
+    console.error(err);
+    alert('Error al cancelar la reserva. Intenta de nuevo.');
+  } finally {
+    setCancelando(null);
+  }
+};
+```
+
+### Reactivate Reservation (Admin Only)
+
+```javascript
+const handleReactivar = async (id) => {
+  if (!esAdmin) return;
+
+  const reservaAux = reservations.find(r => r.id === id);
+  if (!reservaAux || reservaAux.estado !== 'Cancelada') {
+    return;
+  }
+
+  setReactivando(id);
+  try {
+    await updateReservaWithVerification(id, {
+      estado: 'Pendiente',
+      confirmada: null,
+      motivoCancelacion: null,
+      motivo_cancelacion: null,
+      verificacionAsistencia: {
+        fecha: new Date().toISOString(),
+        mensaje: 'Reserva reactivada por administrador.',
+        tipo: 'reactivacion-admin',
+        autorizadaPor: documentoUsuario,
+        nombreAutorizador: datosEmpleado?.nombre ?? 'Administrador',
+      },
+    }, reservaAux);
+
+    setReservations((prev) =>
+      prev.map((r) =>
+        r.id === id
+          ? {
+              ...r,
+              estado: 'Pendiente',
+              confirmada: null,
+              motivoCancelacion: null,
+              verificacionAsistencia: {
+                ...(r.verificacionAsistencia || {}),
+                fecha: new Date().toISOString(),
+                mensaje: 'Reserva reactivada por administrador.',
+                tipo: 'reactivacion-admin',
+                autorizadaPor: documentoUsuario,
+                nombreAutorizador: datosEmpleado?.nombre ?? 'Administrador',
+              },
+            }
+          : r
+      )
+    );
+
+    alert('Reserva reactivada.');
+  } catch (err) {
+    console.error(err);
+    alert(err?.message || 'Error al reactivar la reserva.');
+  } finally {
+    setReactivando(null);
+  }
+};
+```
+
+---
+
+## Helper Functions
+
+### State Resolution
+
+```javascript
+const getEstadoReserva = (attrs = {}) => {
+  const estadoRaw = attrs?.estado;
+
+  // Canonical backend rule: null => Pending, true => Confirmed, false => Canceled
+  if (estadoRaw === true) return 'Confirmada';
+  if (estadoRaw === false) return 'Cancelada';
+  if (estadoRaw === null) return 'Pendiente';
+
+  const motivo = String(attrs?.motivo_cancelacion ?? attrs?.motivoCancelacion ?? '').trim();
+  const tipoVerificacion = String(attrs?.verificacionAsistencia?.tipo ?? '').toLowerCase();
+  const fueCanceladaManualmente = motivo.length > 0 || tipoVerificacion.includes('cancelacion');
+
+  if (fueCanceladaManualmente) return 'Cancelada';
+
+  if (estadoRaw == null) return 'Pendiente';
+
+  const estadoTexto = String(estadoRaw)
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+
+  if (estadoTexto === 'confirmada' || estadoTexto === 'confirmado' || estadoTexto === 'completada' || estadoTexto === 'completado') {
+    return 'Confirmada';
+  }
+
+  if (estadoTexto === 'cancelada' || estadoTexto === 'cancelado') {
+    return 'Cancelada';
+  }
+
+  if (estadoTexto === 'pendiente') return 'Pendiente';
+  return 'Pendiente';
+};
+```
+
+### Name Formatting
+
+```javascript
+const getNombreCorto = (nombre = '') => {
+  const partes = nombre.trim().split(/\s+/);
+  return partes.length >= 2 ? `${partes[0]} ${partes[1]}` : partes[0] ?? '';
+};
+```
+
+### Data Extraction
+
+```javascript
+const extractId = (rel) => {
+  if (rel == null) return null;
+  if (typeof rel === 'number') return rel;
+  if (typeof rel === 'object' && rel.id != null) return rel.id;
+
+  if (typeof rel === 'object' && rel.data != null) {
+    const d = rel.data;
+    if (typeof d === 'number') return d;
+    if (Array.isArray(d) && d.length > 0) return d[0]?.id ?? null;
+    if (typeof d === 'object' && d.id != null) return d.id;
+  }
+
+  return null;
+};
+
+const getPuestoId = (r) => {
+  return (
+    extractId(r.attributes?.working_puestos) ??
+    extractId(r.working_puestos) ??
+    r.attributes?.escritorioId ??
+    r.escritorioId ??
+    null
+  );
+};
+
+const getHorarioId = (r) => {
+  return (
+    extractId(r.attributes?.working_horarios) ??
+    extractId(r.working_horarios) ??
+    r.attributes?.horarioId ??
+    r.horarioId ??
+    null
+  );
+};
+```
+
+### Room Information
+
+```javascript
+const getSalaInfo = (r) => {
+  const puestosData = r.attributes?.working_puestos?.data;
+  const pAttr = Array.isArray(puestosData)
+    ? puestosData[0]?.attributes
+    : puestosData?.attributes ?? null;
+  const salaData = pAttr?.working_sala?.data;
+  if (salaData) {
+    return {
+      salaId:    salaData.id ?? null,
+      salaNombre: salaData.attributes?.nombre ?? `Sala ${salaData.id}`,
+    };
+  }
+  return { salaId: null, salaNombre: null };
+};
+```
+
+---
+
+## Sub-Components
+
+### ReservaCard (Mobile)
+
+Collapsible card for mobile view:
+
+```jsx
+const ReservaCard = ({
+  r,
+  cancelando,
+  confirmando,
+  reactivando,
+  onCancelar,
+  onConfirmar,
+  onReactivar,
+  canConfirm,
+  confirmLabel,
+  helperMessage,
+  showOwner,
+  confirmBlockedMessage,
+  remainingMinutes,
+}) => {
+  const [open, setOpen] = useState(false);
+  const hMeta = HORARIO_META[r.horarioId];
+  const turnoTexto = r.turnoLabel || hMeta?.label || '—';
+  const esCancelada = r.estado === 'Cancelada';
+  const esPendiente = r.estado === 'Pendiente';
+  const confirmDisabled =
+    confirmando === r.id ||
+    cancelando === r.id ||
+    reactivando === r.id ||
+    !esPendiente ||
+    !canConfirm;
+
+  return (
+    <div style={{
+      borderRadius: "12px",
+      border: "1px solid rgba(80,54,41,0.1)",
+      background: "#FDFAF7",
+      overflow: "hidden",
+    }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          width: "100%", display: "flex", alignItems: "center",
+          justifyContent: "space-between", padding: "12px 14px",
+          background: "none", border: "none", cursor: "pointer",
+          textAlign: "left", fontFamily: "inherit",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 0 }}>
+          <Monitor size={13} color="#CC8A22" strokeWidth={2} />
+          <span style={{ fontWeight: 700, fontSize: "0.85rem", color: "#503629", whiteSpace: "nowrap" }}>
+            Escritorio {r.puestoId ?? '—'}
+          </span>
+          <span style={{
+            padding: "2px 9px", borderRadius: "20px",
+            fontSize: "0.7rem", fontWeight: 600,
+            background: esCancelada ? "#F8D7DA" : "#D4EDDA",
+            color: esCancelada ? "#721C24" : "#155724",
+          }}>
+            {r.estado}
+          </span>
+          <span style={{
+            padding: "2px 7px", borderRadius: "20px",
+            fontSize: "0.68rem", fontWeight: 700,
+            background: "rgba(80,54,41,0.08)", color: "#92614F",
+            fontFamily: "monospace",
+          }}>
+            #{r.id}
+          </span>
+        </div>
+        <IconChevron open={open} />
+      </button>
+
+      {open && (
+        <div style={{ padding: "0 14px 14px", borderTop: "1px solid rgba(80,54,41,0.08)", paddingTop: "12px" }}>
+          {/* Details and action buttons */}
+        </div>
+      )}
+    </div>
+  );
+};
+```
+
+---
+
+## Real-time Sync
+
+Uses custom hook for automatic updates:
+
+```javascript
+import useRealtimeSync from '../../hooks/useRealtimeSync';
+
+// Inside component
+useRealtimeSync(cargarReservas);
+```
+
+---
+
+## Filtering System
+
+### Filter Logic
+
+```javascript
+const filteredReservations = useMemo(() => {
+  let result = reservations;
+  
+  // Admin tabs: mis / otros / todos
+  if (esAdmin) {
+    if (adminTab === 'mis') result = result.filter(r => r.documento === documentoUsuario);
+    else if (adminTab === 'otros') result = result.filter(r => r.documento !== documentoUsuario);
+  }
+  
+  // Filter by state
+  if (filterEstado !== 'todos') result = result.filter(r => r.estado === filterEstado);
+  
+  // Filter by room
+  if (filterSala !== 'todas') result = result.filter(r => String(r.salaId) === filterSala);
+  
+  // Search: by ID, name, document, desk
+  if (searchQuery.trim()) {
+    const q = searchQuery.trim().toLowerCase();
+    result = result.filter(r =>
+      String(r.id).includes(q) ||
+      (r.nombreCompleto ?? '').toLowerCase().includes(q) ||
+      (r.nombre ?? '').toLowerCase().includes(q) ||
+      (r.documento ?? '').toLowerCase().includes(q) ||
+      String(r.puestoId ?? '').includes(q)
+    );
+  }
+  return result;
+}, [reservations, esAdmin, adminTab, filterEstado, filterSala, searchQuery, documentoUsuario]);
+```
+
+---
+
+## Geolocation Service Integration
+
+Imports from utility module:
+
+```javascript
+import {
+  calculateDistance,
+  checkGeolocationSupport,
+  getCurrentPosition,
+  getVerificationTimeInfo,
+  getWorkplaceInfo,
+  verifyAttendance,
+} from "../../utils/geolocationService";
+```
+
+### Workplace Configuration
+
+```javascript
+const workplaceInfo = getWorkplaceInfo();
+// Returns: { latitude, longitude, radius, name }
+```
+
+---
+
+## Admin Features
+
+### Extended Permissions
+
+- View all reservations (not just their own)
+- Confirm reservations without geolocation check
+- Confirm reservations outside 25-minute window
+- Reactivate canceled reservations
+- Filter by user (my reservations vs others)
+
+### Admin Confirmation
+
+```javascript
+if (esAdmin) {
+  setConfirmando(id);
+  try {
+    const mensaje = 'Reserva confirmada por administrador.';
+
+    await updateReservaWithVerification(id, {
+      estado: 'Confirmada',
+      confirmada: true,
+      verificacionAsistencia: {
+        fecha: new Date().toISOString(),
+        mensaje,
+        tipo: 'confirmacion-admin-manual',
+        autorizadaPor: documentoUsuario,
+        nombreAutorizador: datosEmpleado?.nombre ?? 'Administrador',
+      },
+    }, reservaAux);
+
+    alert('Reserva confirmada por administrador.');
+  } catch (err) {
+    alert(err?.message || 'Error al confirmar la reserva.');
+  } finally {
+    setConfirmando(null);
+  }
+  return;
+}
+```
+
+---
+
+## Responsive Breakpoint
+
+```javascript
+const useMobile = () => {
+  const [mobile, setMobile] = useState(() => window.innerWidth < 768);
+  useEffect(() => {
+    const fn = () => setMobile(window.innerWidth < 768);
+    window.addEventListener("resize", fn);
+    return () => window.removeEventListener("resize", fn);
+  }, []);
+  return mobile;
+};
+
+const isMobile = useMobile();
+```
+
+---
+
+## Usage Example
+
+```jsx
+import Panel from './assets/componentes/Panel';
+import { useNavigate } from 'react-router-dom';
+
+function App() {
+  const navigate = useNavigate();
+  
+  return (
+    <Routes>
+      <Route path="/panel" element={<Panel />} />
+    </Routes>
+  );
+}
+```
+
+**Navigation with state:**
+
+```javascript
+navigate('/panel', { 
+  state: { 
+    datosEmpleado: {
+      nombre: 'Juan Pérez',
+      document_number: '1234567890',
+      documento: '1234567890',
+      cargo: 'Developer',
+      area_nombre: 'IT',
+      foto: 'https://example.com/photo.jpg'
+    }
+  } 
+});
+```
+
+---
+
+## Related Components
+
+- [Reservas](/development/components/reservations) - Desk booking interface
+- [Salas](/development/components/salas) - Room selection

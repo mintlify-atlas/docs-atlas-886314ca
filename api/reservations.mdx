@@ -1,0 +1,477 @@
+---
+title: Reservations API
+description: Manage desk reservations with the working-reservas endpoint
+---
+
+## Endpoint
+
+```
+GET/POST/PUT/DELETE /api/working-reservas
+```
+
+Base URL: `https://macfer.crepesywaffles.com`
+
+## Get Reservations
+
+Retrieve a list of reservations with optional filtering.
+
+### Request
+
+```http
+GET /api/working-reservas?populate=*&filters[documento][$eq]=1234567890
+```
+
+### Query Parameters
+
+<ParamField query="populate" type="string" default="*">
+  Populate relational fields. Use `*` for all relations or specify:
+  - `working_puestos` - Desk information
+  - `working_horarios` - Schedule information
+</ParamField>
+
+<ParamField query="filters[documento][$eq]" type="string">
+  Filter by user document number
+</ParamField>
+
+<ParamField query="filters[fecha_reserva][$eq]" type="string">
+  Filter by reservation date (YYYY-MM-DD format)
+</ParamField>
+
+<ParamField query="filters[fecha_reserva][$lt]" type="string">
+  Filter reservations before a specific date
+</ParamField>
+
+<ParamField query="sort[0]" type="string">
+  Sort results. Examples:
+  - `fecha_reserva:desc` - Sort by date descending
+  - `id:desc` - Sort by ID descending
+</ParamField>
+
+<ParamField query="pagination[pageSize]" type="number" default="25">
+  Number of results per page. Recommended: 40000 for bulk operations
+</ParamField>
+
+### Response
+
+<ResponseField name="data" type="array">
+  Array of reservation objects
+  
+  <ResponseField name="id" type="number">
+    Unique reservation identifier
+  </ResponseField>
+  
+  <ResponseField name="attributes" type="object">
+    Reservation data
+    
+    <ResponseField name="Nombre" type="string">
+      Full name of the person making the reservation
+    </ResponseField>
+    
+    <ResponseField name="documento" type="string">
+      User's document number (ID)
+    </ResponseField>
+    
+    <ResponseField name="foto" type="string">
+      URL to user's photo
+    </ResponseField>
+    
+    <ResponseField name="area" type="string">
+      User's department or area
+    </ResponseField>
+    
+    <ResponseField name="fecha_reserva" type="string">
+      Reservation date in YYYY-MM-DD format
+    </ResponseField>
+    
+    <ResponseField name="estado" type="boolean | null">
+      Reservation state:
+      - `null` - Pendiente (Pending)
+      - `true` - Confirmada (Confirmed)
+      - `false` - Cancelada (Cancelled)
+    </ResponseField>
+    
+    <ResponseField name="escritorio" type="string">
+      Desk name/label (optional, legacy field)
+    </ResponseField>
+    
+    <ResponseField name="escritorioId" type="number">
+      Desk position ID (1-6)
+    </ResponseField>
+    
+    <ResponseField name="horario" type="string">
+      Schedule name (optional)
+    </ResponseField>
+    
+    <ResponseField name="turno" type="string">
+      Shift name (optional)
+    </ResponseField>
+    
+    <ResponseField name="horaInicio" type="string">
+      Start time (HH:MM:SS format)
+    </ResponseField>
+    
+    <ResponseField name="horaFin" type="string">
+      End time (HH:MM:SS format)
+    </ResponseField>
+    
+    <ResponseField name="motivo_cancelacion" type="string">
+      Cancellation reason (if cancelled)
+    </ResponseField>
+    
+    <ResponseField name="verificacionAsistencia" type="object">
+      Verification metadata
+      
+      <ResponseField name="fecha" type="string">
+        Verification timestamp (ISO 8601)
+      </ResponseField>
+      
+      <ResponseField name="mensaje" type="string">
+        Verification message
+      </ResponseField>
+      
+      <ResponseField name="tipo" type="string">
+        Verification type:
+        - `confirmacion-manual-geolocalizada`
+        - `cancelacion-manual`
+        - `auto-cancelacion`
+        - `confirmacion-admin-manual`
+      </ResponseField>
+      
+      <ResponseField name="distancia" type="number">
+        Distance from workplace in meters (if geolocation used)
+      </ResponseField>
+    </ResponseField>
+    
+    <ResponseField name="working_puestos" type="object">
+      Related desk position
+      
+      <ResponseField name="data" type="object">
+        <ResponseField name="id" type="number">
+          Desk ID
+        </ResponseField>
+      </ResponseField>
+    </ResponseField>
+    
+    <ResponseField name="working_horarios" type="object">
+      Related work schedule
+      
+      <ResponseField name="data" type="object">
+        <ResponseField name="id" type="number">
+          Schedule ID (1=Morning, 2=Afternoon, 3=Full day)
+        </ResponseField>
+      </ResponseField>
+    </ResponseField>
+  </ResponseField>
+</ResponseField>
+
+### Example Response
+
+```json
+{
+  "data": [
+    {
+      "id": 123,
+      "attributes": {
+        "Nombre": "Juan Pérez",
+        "documento": "1234567890",
+        "foto": "https://example.com/photo.jpg",
+        "area": "Desarrollo",
+        "fecha_reserva": "2026-03-15",
+        "estado": null,
+        "escritorioId": 3,
+        "horario": "Mañana",
+        "horaInicio": "08:00:00",
+        "horaFin": "12:00:00",
+        "working_puestos": {
+          "data": {
+            "id": 3
+          }
+        },
+        "working_horarios": {
+          "data": {
+            "id": 1
+          }
+        },
+        "createdAt": "2026-03-14T10:30:00.000Z",
+        "updatedAt": "2026-03-14T10:30:00.000Z"
+      }
+    }
+  ],
+  "meta": {
+    "pagination": {
+      "page": 1,
+      "pageSize": 40000,
+      "pageCount": 1,
+      "total": 1
+    }
+  }
+}
+```
+
+## Create Reservation
+
+Create a new desk reservation.
+
+### Request
+
+```http
+POST /api/working-reservas
+Content-Type: application/json
+```
+
+### Request Body
+
+<ParamField body="data" type="object" required>
+  Reservation data object
+  
+  <ParamField body="Nombre" type="string" required>
+    Full name of the person
+  </ParamField>
+  
+  <ParamField body="documento" type="string" required>
+    User's document number
+  </ParamField>
+  
+  <ParamField body="foto" type="string">
+    URL to user's photo
+  </ParamField>
+  
+  <ParamField body="area" type="string" required>
+    User's department/area
+  </ParamField>
+  
+  <ParamField body="fecha_reserva" type="string" required>
+    Reservation date (YYYY-MM-DD)
+  </ParamField>
+  
+  <ParamField body="estado" type="boolean | null" required>
+    Initial state (use `null` for pending)
+  </ParamField>
+  
+  <ParamField body="working_puestos" type="object" required>
+    Desk assignment
+    
+    <ParamField body="id" type="number" required>
+      Desk position ID (1-6)
+    </ParamField>
+  </ParamField>
+  
+  <ParamField body="working_horarios" type="object" required>
+    Schedule assignment
+    
+    <ParamField body="id" type="number" required>
+      Schedule ID (1=Morning, 2=Afternoon, 3=Full day)
+    </ParamField>
+  </ParamField>
+</ParamField>
+
+### Example Request
+
+```javascript
+const response = await fetch('https://macfer.crepesywaffles.com/api/working-reservas', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    data: {
+      Nombre: 'Juan Pérez',
+      foto: 'https://example.com/photo.jpg',
+      documento: '1234567890',
+      area: 'Desarrollo',
+      fecha_reserva: '2026-03-15',
+      estado: null,
+      working_puestos: { id: 3 },
+      working_horarios: { id: 1 }
+    }
+  })
+});
+```
+
+### Response
+
+Returns the created reservation object with the same structure as GET response.
+
+## Update Reservation
+
+Update an existing reservation (confirm, cancel, or modify).
+
+### Request
+
+```http
+PUT /api/working-reservas/:id
+Content-Type: application/json
+```
+
+### Request Body
+
+<ParamField body="data" type="object" required>
+  Updated reservation data
+  
+  <ParamField body="estado" type="boolean | null">
+    New state:
+    - `true` - Confirm
+    - `false` - Cancel
+    - `null` - Set to pending
+  </ParamField>
+  
+  <ParamField body="motivo_cancelacion" type="string">
+    Cancellation reason (required if estado=false)
+  </ParamField>
+  
+  <ParamField body="verificacionAsistencia" type="object">
+    Verification data
+    
+    <ParamField body="fecha" type="string">
+      Verification timestamp (ISO 8601)
+    </ParamField>
+    
+    <ParamField body="mensaje" type="string">
+      Verification message
+    </ParamField>
+    
+    <ParamField body="tipo" type="string">
+      Verification type
+    </ParamField>
+  </ParamField>
+</ParamField>
+
+### Example: Confirm Reservation
+
+```javascript
+const response = await axiosInstance.put(
+  'https://macfer.crepesywaffles.com/api/working-reservas/123',
+  {
+    data: {
+      estado: true,
+      verificacionAsistencia: {
+        fecha: new Date().toISOString(),
+        mensaje: 'Asistencia confirmada. Distancia: 150 metros.',
+        tipo: 'confirmacion-manual-geolocalizada',
+        distancia: 150
+      }
+    }
+  }
+);
+```
+
+### Example: Cancel Reservation
+
+```javascript
+const response = await axiosInstance.put(
+  'https://macfer.crepesywaffles.com/api/working-reservas/123',
+  {
+    data: {
+      estado: false,
+      motivo_cancelacion: 'Reserva cancelada por el usuario.',
+      verificacionAsistencia: {
+        fecha: new Date().toISOString(),
+        mensaje: 'Reserva cancelada por el usuario.',
+        tipo: 'cancelacion-manual'
+      }
+    }
+  }
+);
+```
+
+## Delete Reservation
+
+Permanently delete a reservation.
+
+### Request
+
+```http
+DELETE /api/working-reservas/:id
+```
+
+### Example
+
+```javascript
+const response = await axiosInstance.delete(
+  'https://macfer.crepesywaffles.com/api/working-reservas/123'
+);
+```
+
+## Helper Functions
+
+The application provides service functions for common operations:
+
+### Get User Reservations
+
+```javascript
+import { getReservasByUsuario } from './utils/reservasService';
+
+const reservas = await getReservasByUsuario('1234567890');
+```
+
+### Cancel Reservation
+
+```javascript
+import { cancelReserva } from './utils/reservasService';
+
+await cancelReserva(
+  reservaId,
+  currentReserva,
+  'Usuario no podrá asistir'
+);
+```
+
+### Get Available Desks
+
+```javascript
+import { getEscritoriosDisponibles } from './utils/reservasService';
+
+const availableDesks = await getEscritoriosDisponibles('2026-03-15');
+// Returns array: [1, 2, 4, 5] (desks 3 and 6 are occupied)
+```
+
+## Common Filters
+
+### Get Today's Reservations
+
+```javascript
+const today = new Date().toISOString().split('T')[0];
+const url = `${API_RESERVAS}?filters[fecha_reserva][$eq]=${today}&populate=*`;
+```
+
+### Get User History (Past Reservations)
+
+```javascript
+const params = new URLSearchParams({
+  'filters[documento][$eq]': '1234567890',
+  'filters[fecha_reserva][$lt]': '2026-03-15',
+  'sort[0]': 'fecha_reserva:desc',
+  'pagination[pageSize]': '50',
+  'populate': '*'
+});
+```
+
+### Get Pending Reservations
+
+```javascript
+// Note: estado=null is pending, but Strapi filters require special handling
+const reservas = await getReservas({ fecha: today });
+const pendientes = reservas.filter(r => r.estado === 'Pendiente');
+```
+
+## Realtime Updates
+
+The system emits custom events when reservations change:
+
+```javascript
+const RESERVAS_UPDATED_EVENT = 'working-reservas-updated';
+
+window.addEventListener('working-reservas-updated', (event) => {
+  console.log('Reservations updated:', event.detail);
+  // Reload reservations
+});
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Schedules API" icon="clock" href="/api/schedules">
+    Manage work schedules
+  </Card>
+  <Card title="Desks API" icon="chair" href="/api/desks">
+    Manage desk positions
+  </Card>
+</CardGroup>

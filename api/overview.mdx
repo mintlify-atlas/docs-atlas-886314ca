@@ -1,0 +1,134 @@
+---
+title: API Overview
+description: Overview of the Working Desk Reservation API
+---
+
+## Introduction
+
+The Working Desk Reservation API is a RESTful API built on Strapi CMS that manages desk reservations, schedules, and room availability for workplace management.
+
+## Base URL
+
+All API requests should be made to:
+
+```
+https://macfer.crepesywaffles.com
+```
+
+## Core Endpoints
+
+The API provides the following main endpoints:
+
+| Endpoint | Description |
+|----------|-------------|
+| `/api/working-reservas` | Manage desk reservations |
+| `/api/working-horarios` | Manage work schedules and time slots |
+| `/api/working-salas` | Manage rooms and workspaces |
+| `/api/working-puestos` | Manage individual desk positions |
+
+## Common Query Parameters
+
+Most endpoints support the following Strapi query parameters:
+
+<ParamField query="populate" type="string" default="*">
+  Populate relational fields. Use `*` to populate all relations or specify specific fields.
+</ParamField>
+
+<ParamField query="filters" type="object">
+  Filter results using Strapi's filter syntax. Example: `filters[documento][$eq]=1234567`
+</ParamField>
+
+<ParamField query="sort" type="string">
+  Sort results. Example: `sort[0]=fecha_reserva:desc`
+</ParamField>
+
+<ParamField query="pagination[pageSize]" type="number" default="25">
+  Number of results per page. Maximum recommended: 40000
+</ParamField>
+
+<ParamField query="pagination[page]" type="number" default="1">
+  Page number for paginated results
+</ParamField>
+
+## Response Format
+
+All API responses follow the Strapi v4 format:
+
+```json
+{
+  "data": [
+    {
+      "id": 1,
+      "attributes": {
+        // Resource fields
+      }
+    }
+  ],
+  "meta": {
+    "pagination": {
+      "page": 1,
+      "pageSize": 25,
+      "pageCount": 1,
+      "total": 10
+    }
+  }
+}
+```
+
+## Data Models
+
+### Reservation States
+
+Reservations use a boolean-based state system:
+
+- `null` - **Pendiente** (Pending confirmation)
+- `true` - **Confirmada** (Confirmed/Completed)
+- `false` - **Cancelada** (Cancelled)
+
+### Schedule IDs
+
+Work schedules are identified by numeric IDs:
+
+- `1` - Mañana (Morning: 8:00 AM - 12:00 PM)
+- `2` - Tarde (Afternoon: 1:00 PM - 5:00 PM)
+- `3` - Día completo (Full day: 8:00 AM - 5:00 PM)
+
+## Error Handling
+
+The API returns standard HTTP status codes:
+
+- `200` - Success
+- `201` - Created
+- `400` - Bad Request
+- `404` - Not Found
+- `500` - Internal Server Error
+
+Error responses include:
+
+```json
+{
+  "error": {
+    "status": 400,
+    "name": "ValidationError",
+    "message": "Error message",
+    "details": {}
+  }
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Authentication" icon="key" href="/api/authentication">
+    Learn about API authentication
+  </Card>
+  <Card title="Reservations" icon="calendar-check" href="/api/reservations">
+    Manage desk reservations
+  </Card>
+  <Card title="Schedules" icon="clock" href="/api/schedules">
+    Work with time schedules
+  </Card>
+  <Card title="Desks" icon="chair" href="/api/desks">
+    Manage desk positions
+  </Card>
+</CardGroup>

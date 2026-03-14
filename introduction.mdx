@@ -1,0 +1,121 @@
+---
+title: "Introduction"
+description: "Welcome to Crepes & Waffles Coworking - Your intelligent workspace management solution"
+---
+
+# Welcome to Crepes & Waffles Coworking
+
+A modern coworking space management system designed to streamline desk reservations, attendance verification, and workspace administration with real-time synchronization.
+
+## What is Crepes & Waffles Coworking?
+
+Crepes & Waffles Coworking is a comprehensive SaaS platform built to manage coworking spaces efficiently. It provides an intuitive interface for users to reserve desks, confirm attendance via geolocation, and manage their bookings—all in real-time.
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Get up and running with your first reservation in minutes
+  </Card>
+  <Card title="Installation" icon="download" href="/installation">
+    Learn how to set up the platform for your coworking space
+  </Card>
+  <Card title="User Guide" icon="user" href="/user-guide/making-reservations">
+    Discover how to make and manage reservations
+  </Card>
+  <Card title="Admin Guide" icon="shield" href="/admin/overview">
+    Learn about administrative features and controls
+  </Card>
+</CardGroup>
+
+## Key Features
+
+<AccordionGroup>
+  <Accordion title="Real-Time Desk Reservations" icon="calendar-check">
+    Book desks instantly with WebSocket-powered synchronization that keeps all users updated in real-time. See availability changes as they happen and avoid booking conflicts.
+  </Accordion>
+  
+  <Accordion title="Geolocation-Based Attendance" icon="location-dot">
+    Confirm your attendance automatically when you arrive at the coworking space. The system verifies your location within a 100-meter radius to ensure you're physically present.
+  </Accordion>
+  
+  <Accordion title="Multi-Shift Scheduling" icon="clock">
+    Choose from morning (8 AM - 12 PM), afternoon (1 PM - 5 PM), or full-day shifts. Flexible scheduling adapts to your work style and availability.
+  </Accordion>
+  
+  <Accordion title="Desk Rotation Policy" icon="arrows-rotate">
+    Automated rotation enforcement ensures fair desk distribution. The system prevents users from booking the same desk consecutively, promoting workspace variety.
+  </Accordion>
+  
+  <Accordion title="Visual Desk Selection" icon="chair">
+    Interactive visual interface shows desk availability at a glance. Click on desks in the workspace layout to see details and make reservations.
+  </Accordion>
+  
+  <Accordion title="Admin Dashboard" icon="gauge-high">
+    Comprehensive management tools for administrators to oversee all reservations, manually confirm bookings, and configure workspace settings.
+  </Accordion>
+</AccordionGroup>
+
+## How It Works
+
+<Steps>
+  <Step title="Authenticate">
+    Users log in with their employee credentials (document number/ID).
+  </Step>
+  
+  <Step title="Browse Available Desks">
+    View the workspace layout showing which desks are available for your chosen date and time slot.
+  </Step>
+  
+  <Step title="Make a Reservation">
+    Select your preferred desk and time slot. The system validates desk rotation rules and availability in real-time.
+  </Step>
+  
+  <Step title="Confirm Attendance">
+    On the day of your reservation, confirm your attendance when you arrive. The system uses geolocation to verify you're at the workspace.
+  </Step>
+  
+  <Step title="Manage Your Bookings">
+    View, modify, or cancel your reservations from the user panel. Admins can manage all user reservations from the admin dashboard.
+  </Step>
+</Steps>
+
+## Use Cases
+
+<CardGroup cols={2}>
+  <Card title="Corporate Offices" icon="building">
+    Perfect for companies implementing hybrid work models with shared desk spaces
+  </Card>
+  <Card title="Coworking Spaces" icon="people-group">
+    Ideal for coworking facilities managing multiple users and desk assignments
+  </Card>
+  <Card title="Hot Desking" icon="shuffle">
+    Enable flexible seating arrangements with automated rotation and fair distribution
+  </Card>
+  <Card title="Attendance Tracking" icon="clipboard-check">
+    Monitor workspace utilization and verify employee attendance automatically
+  </Card>
+</CardGroup>
+
+## Technology Stack
+
+The platform is built with modern web technologies:
+
+- **Frontend**: React 19 with Vite for fast development and optimized builds
+- **UI Framework**: Ant Design components with custom SCSS styling
+- **Routing**: React Router for seamless navigation
+- **Real-Time Sync**: WebSocket integration for live updates
+- **Geolocation**: Browser Geolocation API for attendance verification
+- **API Integration**: Axios for backend communication
+
+## Next Steps
+
+<CardGroup cols={3}>
+  <Card title="Quick Start Guide" icon="play" href="/quickstart">
+    Follow our step-by-step guide to get started
+  </Card>
+  <Card title="Core Features" icon="star" href="/features/reservations">
+    Explore the platform's key capabilities
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/overview">
+    Learn about the backend API endpoints
+  </Card>
+</CardGroup>

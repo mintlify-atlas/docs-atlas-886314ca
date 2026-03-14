@@ -1,0 +1,177 @@
+---
+title: "Environment Variables"
+description: "Configure environment variables for the Crepes & Waffles Coworking application"
+---
+
+## Overview
+
+The application uses Vite's environment variable system. All environment variables must be prefixed with `VITE_` to be exposed to the client-side code.
+
+## Configuration File
+
+Create a `.env` file in the root directory of your project:
+
+```bash
+# .env
+VITE_RESERVAS_WS_URL=wss://tu-servidor/ws/reservas
+VITE_RESERVAS_POLLING_MS=30000
+```
+
+<Warning>
+  Never commit `.env` files to version control. Add `.env` to your `.gitignore` file.
+</Warning>
+
+## Environment Variables Reference
+
+### VITE_RESERVAS_WS_URL
+
+<ParamField path="VITE_RESERVAS_WS_URL" type="string" optional>
+  WebSocket endpoint URL for real-time reservation synchronization
+</ParamField>
+
+**Purpose**: Enables real-time synchronization of reservations between multiple users without page refreshes.
+
+**Format**: Must be a valid WebSocket URL starting with `ws://` or `wss://`
+
+**Example values**:
+```bash
+# Development
+VITE_RESERVAS_WS_URL=ws://localhost:8080/ws/reservas
+
+# Production (secure)
+VITE_RESERVAS_WS_URL=wss://api.crepeswaffles.com/ws/reservas
+```
+
+**Default behavior**: If not set, the application will function with local events and polling as fallback.
+
+**Usage in code** (`src/hooks/useRealtimeSync.js:3`):
+```javascript
+const WS_URL = import.meta.env.VITE_RESERVAS_WS_URL || '';
+```
+
+### VITE_RESERVAS_POLLING_MS
+
+<ParamField path="VITE_RESERVAS_POLLING_MS" type="number" default="30000" optional>
+  Polling interval in milliseconds for fallback synchronization
+</ParamField>
+
+**Purpose**: Sets the interval for automatic polling when WebSocket connection is unavailable or as a backup mechanism.
+
+**Format**: Number in milliseconds
+
+**Example values**:
+```bash
+# Poll every 30 seconds (default)
+VITE_RESERVAS_POLLING_MS=30000
+
+# Poll every 60 seconds
+VITE_RESERVAS_POLLING_MS=60000
+
+# Poll every 15 seconds (more frequent)
+VITE_RESERVAS_POLLING_MS=15000
+```
+
+**Default value**: `30000` (30 seconds)
+
+**Usage in code** (`src/hooks/useRealtimeSync.js:4`):
+```javascript
+const POLLING_MS = Number(import.meta.env.VITE_RESERVAS_POLLING_MS || 30000);
+```
+
+## Real-time Synchronization Behavior
+
+The application uses a multi-layered synchronization strategy:
+
+### 1. WebSocket Connection (Primary)
+
+When `VITE_RESERVAS_WS_URL` is configured:
+- Establishes WebSocket connection on application start
+- Listens for `working-reservas-updated` events
+- Automatically reconnects with exponential backoff (max 15 seconds)
+- Provides instant updates across all connected clients
+
+### 2. Custom Events (Local)
+
+Always active, regardless of WebSocket configuration:
+- Listens for `reservas-updated` and `working-reservas-updated` custom events
+- Enables synchronization between components in the same browser session
+
+### 3. Polling (Fallback)
+
+Always active as a safety net:
+- Polls at the interval specified by `VITE_RESERVAS_POLLING_MS`
+- Ensures data consistency even if WebSocket and events fail
+- Only triggers if no sync occurred during the polling interval
+
+## Environment-Specific Configuration
+
+### Development Environment
+
+Create a `.env.development` file:
+
+```bash
+VITE_RESERVAS_WS_URL=ws://localhost:8080/ws/reservas
+VITE_RESERVAS_POLLING_MS=15000
+```
+
+### Production Environment
+
+Create a `.env.production` file:
+
+```bash
+VITE_RESERVAS_WS_URL=wss://api.crepeswaffles.com/ws/reservas
+VITE_RESERVAS_POLLING_MS=30000
+```
+
+## Accessing Environment Variables
+
+In your code, access environment variables using Vite's `import.meta.env`:
+
+```javascript
+// Correct way
+const wsUrl = import.meta.env.VITE_RESERVAS_WS_URL;
+const pollingMs = import.meta.env.VITE_RESERVAS_POLLING_MS;
+
+// ❌ Wrong - will not work
+const apiKey = process.env.VITE_API_KEY; // Don't use process.env
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="WebSocket not connecting">
+    1. Verify `VITE_RESERVAS_WS_URL` is correctly set in `.env`
+    2. Check that the URL uses `ws://` or `wss://` protocol
+    3. Ensure the WebSocket server is running and accessible
+    4. Check browser console for connection errors
+    5. Verify CORS settings on the WebSocket server
+  </Accordion>
+
+  <Accordion title="Environment variables not updating">
+    1. Restart the Vite dev server after changing `.env` files
+    2. Clear browser cache and hard reload
+    3. Verify the variable name starts with `VITE_`
+    4. Check that you're using `import.meta.env` not `process.env`
+  </Accordion>
+
+  <Accordion title="Synchronization is slow">
+    1. Lower the `VITE_RESERVAS_POLLING_MS` value for more frequent polling
+    2. Verify WebSocket connection is established (check console logs)
+    3. Check network latency to the WebSocket server
+  </Accordion>
+</AccordionGroup>
+
+## Security Considerations
+
+<Warning>
+  - Never expose sensitive credentials in environment variables accessible to the client
+  - Use `wss://` (secure WebSocket) in production, not `ws://`
+  - Store backend API keys and secrets on the server side only
+  - Add `.env*` files to `.gitignore` to prevent accidental commits
+</Warning>
+
+## Next Steps
+
+<Card title="Project Structure" icon="folder-tree" href="/development/project-structure">
+  Explore the codebase organization and understand where to find key files
+</Card>

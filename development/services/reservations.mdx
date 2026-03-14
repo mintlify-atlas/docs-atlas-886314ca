@@ -1,0 +1,554 @@
+---
+title: "Reservations Service"
+description: "CRUD operations, automatic cancellation, and status management for reservations"
+---
+
+## Overview
+
+The Reservations Service handles all reservation operations including creation, updates, cancellation, and automatic expiration. It manages in-memory status overlays and emits events for real-time synchronization.
+
+**Location**: `src/utils/reservasService.js`
+
+## Configuration
+
+```javascript
+const API_RESERVAS_ENDPOINT = 'https://macfer.crepesywaffles.com/api/working-reservas';
+const RESERVAS_UPDATED_EVENT = 'working-reservas-updated';
+const PAGE_SIZE = 40000;
+```
+
+## Core Functions
+
+### Fetching Reservations
+
+#### `getReservas(filters)`
+
+Fetches reservations from the API with optional filters.
+
+**Parameters:**
+- `filters` (Object, optional):
+  - `cedula` (string): Filter by user document ID
+  - `fecha` (string): Filter by date (YYYY-MM-DD)
+
+**Returns:** `Promise<Array>` - Array of normalized reservations, sorted by date (newest first)
+
+**Implementation:**
+```javascript
+export const getReservas = async (filters = {}) => {
+  const response = await axiosInstance.get(API_RESERVAS_ENDPOINT, {
+    params: buildQueryParams(filters),
+  });
+
+  return normalizeCollection(response.data)
+    .map(normalizeReserva)
+    .sort((a, b) => 
+      String(b.fecha || '').localeCompare(String(a.fecha || '')) || 
+      Number(b.id || 0) - Number(a.id || 0)
+    );
+};
+```
+
+**Example:**
+```javascript
+// Get all reservations
+const allReservas = await getReservas();
+
+// Get reservations for specific date
+const todayReservas = await getReservas({ fecha: '2026-03-14' });
+
+// Get user's reservations
+const userReservas = await getReservas({ cedula: '1234567890' });
+```
+
+#### `getReservasByUsuario(cedula)`
+
+Fetches all reservations for a specific user.
+
+**Parameters:**
+- `cedula` (string): User's document ID
+
+**Returns:** `Promise<Array>` - User's reservations
+
+**Example:**
+```javascript
+const myReservations = await getReservasByUsuario('1234567890');
+console.log(`Found ${myReservations.length} reservations`);
+```
+
+#### `getReservasPendientesHoy()`
+
+Fetches all pending reservations for today.
+
+**Returns:** `Promise<Array>` - Today's pending reservations
+
+**Implementation:**
+```javascript
+export const getReservasPendientesHoy = async () => {
+  const today = getLocalDateString();
+  const reservas = await getReservas({ fecha: today });
+  return reservas.filter((reserva) => reserva.estado === 'Pendiente');
+};
+```
+
+### Creating Reservations
+
+#### `createReservaRecord(reservaData)`
+
+Creates a new reservation record.
+
+**Parameters:**
+- `reservaData` (Object):
+  - `nombre` (string): User's name
+  - `cedula` (string): User's document ID
+  - `area` (string): User's area/department
+  - `fecha` (string): Reservation date (YYYY-MM-DD)
+  - `escritorio` (string): Desk name
+  - `escritorioId` (number): Desk ID
+  - `horario` (string): Time slot name
+  - `turno` (string): Shift name
+  - `horaInicio` (string): Start time (HH:MM:SS)
+  - `horaFin` (string): End time (HH:MM:SS)
+  - `foto` (string, optional): User photo URL
+  - `correo` (string, optional): User email
+  - `cargo` (string, optional): User job title
+  - `estado` (string, optional): Status
+  - `confirmada` (boolean, optional): Confirmation flag
+
+**Returns:** `Promise<Object>` - Created reservation object
+
+**Example:**
+```javascript
+const newReserva = await createReservaRecord({
+  nombre: 'Juan Pérez',
+  cedula: '1234567890',
+  area: 'Desarrollo',
+  fecha: '2026-03-15',
+  escritorio: 'escritorio1',
+  escritorioId: 1,
+  horario: 'Turno 1',
+  turno: 'mañana',
+  horaInicio: '08:00:00',
+  horaFin: '12:00:00',
+  correo: 'juan.perez@example.com'
+});
+
+console.log(`Created reservation ID: ${newReserva.id}`);
+```
+
+### Updating Reservations
+
+#### `updateReservaWithVerification(id, updateData, currentReserva)`
+
+Updates a reservation with verification data (location, time, etc.).
+
+**Parameters:**
+- `id` (number|string): Reservation ID
+- `updateData` (Object): Fields to update
+  - `estado` (string): New status ("Confirmada" | "Cancelada" | "Pendiente")
+  - `confirmada` (boolean): Confirmation flag
+  - `motivoCancelacion` (string): Cancellation reason
+  - `verificacionAsistencia` (Object): Verification details
+    - `fecha` (string): Verification timestamp (ISO)
+    - `mensaje` (string): Verification message
+    - `tipo` (string): Verification type
+- `currentReserva` (Object, optional): Current reservation data for merging
+
+**Returns:** `Promise<Object>` - Updated reservation
+
+**Example:**
+```javascript
+const updated = await updateReservaWithVerification(
+  reserva.id,
+  {
+    estado: 'Confirmada',
+    confirmada: true,
+    verificacionAsistencia: {
+      fecha: new Date().toISOString(),
+      mensaje: 'Asistencia confirmada. Distancia: 150 metros.',
+      tipo: 'verificacion-gps'
+    }
+  },
+  reserva
+);
+
+console.log(`Status updated to: ${updated.estado}`);
+```
+
+#### `updateReservaRecord(id, reservaData, currentReserva)`
+
+Updates any reservation fields (general update function).
+
+**Parameters:**
+- `id` (number|string): Reservation ID
+- `reservaData` (Object): Fields to update
+- `currentReserva` (Object, optional): Current reservation data
+
+**Returns:** `Promise<Object>` - Updated reservation
+
+### Cancelling Reservations
+
+#### `cancelReserva(id, currentReserva, motivo)`
+
+Cancels a reservation with a specific reason.
+
+**Parameters:**
+- `id` (number|string): Reservation ID
+- `currentReserva` (Object, optional): Current reservation data
+- `motivo` (string, optional): Cancellation reason (default: "Reserva cancelada por el usuario.")
+
+**Returns:** `Promise<Object>` - Cancelled reservation
+
+**Implementation:**
+```javascript
+export const cancelReserva = async (
+  id, 
+  currentReserva = null, 
+  motivo = 'Reserva cancelada por el usuario.'
+) => {
+  return updateReservaWithVerification(id, {
+    estado: 'Cancelada',
+    confirmada: false,
+    motivoCancelacion: motivo,
+    motivo_cancelacion: motivo,
+    verificacionAsistencia: {
+      fecha: new Date().toISOString(),
+      mensaje: motivo,
+      tipo: 'cancelacion-manual',
+    },
+  }, currentReserva);
+};
+```
+
+**Example:**
+```javascript
+// Cancel with default reason
+await cancelReserva(reserva.id, reserva);
+
+// Cancel with custom reason
+await cancelReserva(
+  reserva.id, 
+  reserva, 
+  'Usuario enfermo'
+);
+```
+
+#### `cancelarReservasVencidas()`
+
+Automatically cancels all expired pending reservations for today.
+
+**Returns:** `Promise<Object>`:
+```javascript
+{
+  canceled: number,
+  message: string
+}
+```
+
+**Implementation:**
+```javascript
+export const cancelarReservasVencidas = async () => {
+  const horarios = await fetchWorkingHorarios();
+  const reservasPendientes = await getReservasPendientesHoy();
+  const motivoAutoCancelacion = 'Reserva cancelada por falta de confirmacion';
+
+  let canceladas = 0;
+
+  for (const reserva of reservasPendientes) {
+    const evaluation = evaluateReservationStatus(reserva, horarios);
+
+    // Only cancel if past the 25-minute verification window
+    if (!evaluation.shouldUpdate || evaluation.newStatus !== 'Cancelada') {
+      continue;
+    }
+
+    await updateReservaWithVerification(reserva.id, {
+      estado: 'Cancelada',
+      confirmada: false,
+      motivoCancelacion: motivoAutoCancelacion,
+      motivo_cancelacion: motivoAutoCancelacion,
+      verificacionAsistencia: {
+        fecha: new Date().toISOString(),
+        mensaje: motivoAutoCancelacion,
+        tipo: 'auto-cancelacion',
+      },
+    }, reserva);
+
+    canceladas += 1;
+  }
+
+  return {
+    canceled: canceladas,
+    message: canceladas > 0
+      ? `${canceladas} reserva(s) cancelada(s) automáticamente`
+      : 'No hay reservas vencidas para cancelar',
+  };
+};
+```
+
+**Example:**
+```javascript
+const result = await cancelarReservasVencidas();
+console.log(result.message);
+// "3 reserva(s) cancelada(s) automáticamente"
+```
+
+### Deleting Reservations
+
+#### `deleteReservaRecord(id)`
+
+Permanently deletes a reservation from the database.
+
+**Parameters:**
+- `id` (number|string): Reservation ID
+
+**Returns:** `Promise<boolean>` - `true` on success
+
+**Example:**
+```javascript
+const deleted = await deleteReservaRecord(123);
+if (deleted) {
+  console.log('Reservation deleted successfully');
+}
+```
+
+### Desk Availability
+
+#### `getEscritoriosDisponibles(fecha)`
+
+Returns available desk IDs for a specific date.
+
+**Parameters:**
+- `fecha` (string): Date in YYYY-MM-DD format
+
+**Returns:** `Promise<Array<number>>` - Available desk IDs (1-6)
+
+**Implementation:**
+```javascript
+export const getEscritoriosDisponibles = async (fecha) => {
+  const reservas = await getReservas({ fecha });
+  const activas = reservas.filter(
+    (reserva) => reserva.estado === 'Pendiente' || reserva.estado === 'Confirmada'
+  );
+  const ocupados = activas
+    .map((reserva) => Number(reserva.escritorioId))
+    .filter((id) => !Number.isNaN(id));
+
+  return [1, 2, 3, 4, 5, 6].filter((id) => !ocupados.includes(id));
+};
+```
+
+**Example:**
+```javascript
+const available = await getEscritoriosDisponibles('2026-03-15');
+console.log(`Available desks: ${available.join(', ')}`);
+// "Available desks: 2, 4, 6"
+```
+
+### Data Management
+
+#### `clearReservasOverlay()`
+
+Clears the in-memory status overlay cache and emits update event.
+
+**Returns:** `boolean` - `true` on success
+
+**Example:**
+```javascript
+clearReservasOverlay();
+console.log('Cache cleared');
+```
+
+#### `exportReservasToJSON()`
+
+Exports all reservations to a downloadable JSON file.
+
+**Returns:** `Promise<boolean>` - `true` on success
+
+**Example:**
+```javascript
+await exportReservasToJSON();
+// Downloads: reservas_backup_2026-03-14.json
+```
+
+## Data Structures
+
+### Reservation Object
+
+```javascript
+{
+  id: number,
+  key: number,
+  nombre: string,              // "Juan Pérez"
+  foto: string,                // URL or empty
+  cedula: string,              // "1234567890"
+  area: string,                // "Desarrollo"
+  fecha: string,               // "2026-03-14"
+  estado: string,              // "Confirmada" | "Cancelada" | "Pendiente"
+  confirmada: boolean | null,  // true | false | null
+  escritorio: string | null,   // "escritorio1"
+  escritorioId: number | null, // 1
+  horario: string | null,      // "Turno 1"
+  turno: string | null,        // "mañana"
+  horaInicio: string | null,   // "08:00:00"
+  horaFin: string | null,      // "12:00:00"
+  horarioId: number | null,
+  verificacionAsistencia: Object | null,
+  motivoCancelacion: string | null,
+  createdAt: string | null,
+  updatedAt: string | null,
+  rawAttributes: Object
+}
+```
+
+### Verification Object
+
+```javascript
+{
+  fecha: string,      // ISO timestamp
+  mensaje: string,    // "Asistencia confirmada. Distancia: 150 metros."
+  tipo: string        // "verificacion-gps" | "cancelacion-manual" | "auto-cancelacion"
+}
+```
+
+## Event System
+
+The service emits custom events when reservations are updated:
+
+```javascript
+export const RESERVAS_UPDATED_EVENT = 'working-reservas-updated';
+```
+
+### Listening for Updates
+
+```javascript
+window.addEventListener('working-reservas-updated', (event) => {
+  console.log('Reservations updated:', event.detail);
+  // event.detail: { timestamp, id, deleted?, cleared? }
+  
+  // Refresh your reservation list
+  refreshReservations();
+});
+```
+
+## Status Normalization
+
+The service normalizes various status representations:
+
+```javascript
+const toEstado = (value) => {
+  if (value === true) return 'Confirmada';
+  if (value === false) return 'Cancelada';
+  if (value == null) return 'Pendiente';
+
+  const normalized = String(value)
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+
+  if (normalized === 'confirmada' || normalized === 'confirmado' || 
+      normalized === 'completada' || normalized === 'completado') {
+    return 'Confirmada';
+  }
+
+  if (normalized === 'cancelada' || normalized === 'cancelado') {
+    return 'Cancelada';
+  }
+
+  return 'Pendiente';
+};
+```
+
+**Examples:**
+```javascript
+toEstado(true)           // "Confirmada"
+toEstado(false)          // "Cancelada"
+toEstado('confirmada')   // "Confirmada"
+toEstado('CANCELADA')    // "Cancelada"
+toEstado(null)           // "Pendiente"
+toEstado('pendiente')    // "Pendiente"
+```
+
+## Complete Workflow Example
+
+```javascript
+import {
+  createReservaRecord,
+  getReservasByUsuario,
+  getEscritoriosDisponibles,
+  updateReservaWithVerification,
+  cancelReserva,
+  cancelarReservasVencidas,
+  RESERVAS_UPDATED_EVENT
+} from '../utils/reservasService';
+import { verifyAttendance } from '../utils/geolocationService';
+
+// 1. Check available desks
+const fecha = '2026-03-15';
+const availableDesks = await getEscritoriosDisponibles(fecha);
+
+if (availableDesks.length === 0) {
+  console.error('No desks available');
+  return;
+}
+
+// 2. Create a reservation
+const newReserva = await createReservaRecord({
+  nombre: 'Juan Pérez',
+  cedula: '1234567890',
+  area: 'Desarrollo',
+  fecha,
+  escritorio: `escritorio${availableDesks[0]}`,
+  escritorioId: availableDesks[0],
+  horario: 'Turno 1',
+  turno: 'mañana',
+  horaInicio: '08:00:00',
+  horaFin: '12:00:00'
+});
+
+console.log(`Reservation created: ${newReserva.id}`);
+
+// 3. Listen for real-time updates
+window.addEventListener(RESERVAS_UPDATED_EVENT, async (event) => {
+  console.log('Update received:', event.detail);
+  const userReservations = await getReservasByUsuario('1234567890');
+  updateUI(userReservations);
+});
+
+// 4. Verify attendance (on reservation day)
+const verification = await verifyAttendance(newReserva);
+
+if (verification.success && verification.shouldUpdate) {
+  await updateReservaWithVerification(
+    newReserva.id,
+    {
+      estado: verification.newStatus,
+      confirmada: verification.confirmed,
+      verificacionAsistencia: {
+        fecha: new Date().toISOString(),
+        mensaje: verification.message,
+        tipo: 'verificacion-gps'
+      }
+    },
+    newReserva
+  );
+}
+
+// 5. Run automatic cancellation (scheduled task)
+setInterval(async () => {
+  const result = await cancelarReservasVencidas();
+  console.log(result.message);
+}, 5 * 60 * 1000); // Every 5 minutes
+
+// 6. Manual cancellation
+if (userWantsToCancelReservation) {
+  await cancelReserva(newReserva.id, newReserva, 'Usuario enfermo');
+  console.log('Reservation cancelled');
+}
+```
+
+## See Also
+
+- [Geolocation Service](/development/services/geolocation) - GPS verification and time validation
+- [WebSocket Service](/development/services/websocket) - Real-time synchronization
+- [Reservations Component](/development/components/reservations) - Main reservation interface

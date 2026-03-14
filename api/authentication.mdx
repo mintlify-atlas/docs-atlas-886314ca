@@ -1,0 +1,147 @@
+---
+title: Authentication
+description: Authentication and authorization for the API
+---
+
+## Overview
+
+The Working Desk Reservation API uses **header-based authentication** for API requests. All requests should include appropriate headers for content type.
+
+## Headers
+
+The following headers are used in API requests:
+
+<ParamField header="Content-Type" type="string" required>
+  Set to `application/json` for all requests that send JSON data
+</ParamField>
+
+### Example Request Headers
+
+```javascript
+const headers = {
+  'Content-Type': 'application/json',
+};
+```
+
+## Axios Instance Configuration
+
+The application uses a pre-configured Axios instance:
+
+```javascript
+import axios from 'axios';
+
+const axiosInstance = axios.create({
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+export default axiosInstance;
+```
+
+## User Authorization
+
+### Admin Users
+
+Certain operations require administrator privileges. Admin users are identified by their document numbers:
+
+```javascript
+const ADMINS = ['1028783377', '1019096266'];
+
+const esAdmin = ADMINS.includes(usuario.document_number);
+```
+
+**Admin Privileges:**
+- View all reservations (not just their own)
+- Manually confirm reservations outside the verification window
+- Cancel any reservation
+- Reactivate cancelled reservations
+
+### Regular Users
+
+Regular users can:
+- View their own reservations
+- Create new reservations
+- Confirm their reservations within the verification window (25 minutes from shift start)
+- Cancel their own reservations
+
+## User Identification
+
+Users are identified by their document number (`documento` field) in API requests:
+
+```javascript
+// Filter reservations by user document
+const params = {
+  'filters[documento][$eq]': '1234567890'
+};
+```
+
+## Security Considerations
+
+<Warning>
+  The API currently does not implement token-based authentication. Ensure the API is deployed in a secure environment with appropriate network-level security controls.
+</Warning>
+
+<Info>
+  User data is validated on the client side before making API requests. Document numbers are used as the primary identifier for user-specific operations.
+</Info>
+
+## Geolocation Verification
+
+For reservation confirmations, the system uses geolocation to verify user presence:
+
+```javascript
+const WORKPLACE_COORDS = {
+  latitude: 4.74488,
+  longitude: -74.04483,
+  name: 'Crepe-Working 1'
+};
+
+const ALLOWED_RADIUS_METERS = 1000;
+```
+
+**Verification Requirements:**
+- User must be within 1000 meters of the workplace coordinates
+- Only applies to regular user confirmations (not admin confirmations)
+- Geolocation permission must be granted in the browser
+
+## Example: Making Authenticated Requests
+
+```javascript
+import axiosInstance from '../api/axiosInstance';
+
+// GET request
+const response = await axiosInstance.get(
+  'https://macfer.crepesywaffles.com/api/working-reservas',
+  {
+    params: {
+      populate: '*',
+      'filters[documento][$eq]': '1234567890'
+    }
+  }
+);
+
+// POST request
+const response = await axiosInstance.post(
+  'https://macfer.crepesywaffles.com/api/working-reservas',
+  {
+    data: {
+      Nombre: 'John Doe',
+      documento: '1234567890',
+      fecha_reserva: '2026-03-15',
+      estado: null
+    }
+  }
+);
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Reservations API" icon="calendar-check" href="/api/reservations">
+    Learn how to manage reservations
+  </Card>
+  <Card title="Users API" icon="users" href="/api/users">
+    User data and permissions
+  </Card>
+</CardGroup>

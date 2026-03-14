@@ -1,0 +1,637 @@
+---
+title: 'Installation'
+description: 'Set up and deploy the Crepes & Waffles Coworking platform'
+icon: 'download'
+---
+
+This guide covers installing dependencies, configuring environment variables, and running the development server for the Crepes & Waffles Coworking platform.
+
+## Prerequisites
+
+Before you begin, ensure you have:
+
+- **Node.js** 18+ and npm 9+ installed
+- Access to the employee API (`https://apialohav2.crepesywaffles.com`)
+- Access to the reservations API (`https://macfer.crepesywaffles.com`)
+- (Optional) WebSocket server URL for real-time sync
+
+<Note>
+The platform is built with **React 19**, **Vite 7**, **React Router 7**, and **Ant Design 6**. See `package.json` for the full dependency list.
+</Note>
+
+---
+
+## Quick Start
+
+<Steps>
+  <Step title="Clone the repository">
+    ```bash
+    git clone <repository-url>
+    cd crepe_working1
+    ```
+  </Step>
+
+  <Step title="Install dependencies">
+    ```bash
+    npm install
+    ```
+
+    This installs all required packages from `package.json:12-24`:
+
+    ```json package.json
+    "dependencies": {
+      "@tailwindcss/vite": "^4.2.1",
+      "antd": "^6.3.1",
+      "axios": "^1.13.6",
+      "dayjs": "^1.11.19",
+      "lucide-react": "^0.577.0",
+      "react": "^19.2.0",
+      "react-dom": "^19.2.0",
+      "react-icons": "^5.5.0",
+      "react-router-dom": "^7.13.0",
+      "tailwindcss": "^4.2.1",
+      "three": "^0.183.1"
+    }
+    ```
+  </Step>
+
+  <Step title="Configure environment variables">
+    Create a `.env` file in the root directory:
+
+    ```bash
+    touch .env
+    ```
+
+    Add the required configuration (see [Environment Variables](#environment-variables) section below).
+  </Step>
+
+  <Step title="Start the development server">
+    ```bash
+    npm run dev
+    ```
+
+    The app will start at `http://localhost:5173` (default Vite port).
+
+    <Tip>
+    Vite provides instant hot module replacement (HMR) — changes to your code will reflect immediately without full page reloads.
+    </Tip>
+  </Step>
+</Steps>
+
+---
+
+## Environment Variables
+
+The platform uses environment variables for configuration. Create a `.env` file in the project root.
+
+### Required Variables
+
+<Note>
+This platform doesn't require any mandatory environment variables to run locally. The API endpoints are hardcoded in the source code. However, you can configure optional variables for enhanced features.
+</Note>
+
+### Optional Variables
+
+#### WebSocket Configuration
+
+Enable real-time synchronization so multiple users see reservation updates instantly without reloading.
+
+```bash .env
+# WebSocket endpoint for real-time reservation updates
+VITE_RESERVAS_WS_URL=wss://tu-servidor/ws/reservas
+
+# Polling interval in milliseconds (fallback when WebSocket unavailable)
+VITE_RESERVAS_POLLING_MS=30000
+```
+
+**How it works:**
+
+- If `VITE_RESERVAS_WS_URL` is set, the app connects to WebSocket for instant updates
+- If WebSocket fails or isn't configured, the app polls the API every `VITE_RESERVAS_POLLING_MS` milliseconds (default: 30 seconds)
+- Local events still work without WebSocket — users see their own changes immediately
+
+<CodeGroup>
+
+```javascript With WebSocket
+// src/hooks/useRealtimeSync.js
+const ws = new WebSocket(import.meta.env.VITE_RESERVAS_WS_URL);
+
+ws.onmessage = (event) => {
+  if (event.data === 'reservas-updated') {
+    refreshCallback(); // Reload reservations
+  }
+};
+```
+
+```javascript Without WebSocket (Polling)
+// Fallback to polling every 30 seconds
+const interval = setInterval(() => {
+  refreshCallback();
+}, import.meta.env.VITE_RESERVAS_POLLING_MS || 30000);
+```
+
+</CodeGroup>
+
+<Warning>
+WebSocket URLs must use the `wss://` protocol (secure WebSocket). Using `ws://` will fail in production environments with HTTPS.
+</Warning>
+
+### Environment Variable Access
+
+Vite exposes environment variables prefixed with `VITE_` to your client-side code:
+
+```javascript
+// Access in your components
+const wsUrl = import.meta.env.VITE_RESERVAS_WS_URL;
+const pollingMs = import.meta.env.VITE_RESERVAS_POLLING_MS;
+```
+
+<Tip>
+Never commit your `.env` file to version control. Add it to `.gitignore` to protect sensitive configuration.
+</Tip>
+
+---
+
+## Project Structure
+
+Understanding the codebase organization:
+
+```
+crepe_working1/
+├── src/
+│   ├── App.jsx                          # Main app with routing
+│   ├── assets/
+│   │   ├── componentes/
+│   │   │   ├── Validar_cedula.jsx      # ID validation (login)
+│   │   │   ├── Bienvenida.jsx          # Welcome screen
+│   │   │   ├── Politicas.jsx           # Policy acceptance
+│   │   │   ├── Salas.jsx               # Room selection
+│   │   │   ├── Reservas.jsx            # Desk reservation interface
+│   │   │   └── Panel.jsx               # Reservation management panel
+│   │   ├── sillaDis.png                # Green chair (available)
+│   │   ├── sillaLim.png                # Yellow chair (limited)
+│   │   ├── sillaOcu.png                # Red chair (occupied)
+│   │   └── mesa.png                    # Desk table image
+│   ├── hooks/
+│   │   ├── useAutoCancelarReservas.js  # Auto-cancel expired reservations
+│   │   └── useRealtimeSync.js          # WebSocket + polling sync
+│   ├── utils/
+│   │   ├── reservasService.js          # Reservation API calls
+│   │   └── geolocationService.js       # Location verification
+│   └── main.jsx                         # Entry point
+├── package.json                         # Dependencies and scripts
+├── vite.config.js                       # Vite configuration
+├── tailwind.config.js                   # Tailwind CSS config
+├── .env                                 # Environment variables (create this)
+└── README.md                            # Project documentation
+```
+
+### Key Files Explained
+
+<AccordionGroup>
+  <Accordion title="src/App.jsx - Application Routes">
+    Defines the main routing structure using React Router:
+
+    ```jsx src/App.jsx
+    import { Routes, Route } from 'react-router-dom'
+import Validar_cedula from './assets/componentes/Validar_cedula.jsx'
+import Bienvenida from './assets/componentes/Bienvenida.jsx'
+import Politicas from './assets/componentes/Politicas.jsx'
+import Salas from './assets/componentes/Salas.jsx'
+import Reservas from './assets/componentes/Reservas.jsx'
+import Panel from './assets/componentes/Panel.jsx'
+import useAutoCancelarReservas from './hooks/useAutoCancelarReservas.js'
+
+function App() {
+  useAutoCancelarReservas(true)
+
+  return (
+    <div className="App">
+      <Routes>
+        <Route path="/" element={<Validar_cedula />} />
+        <Route path="/bienvenida" element={<Bienvenida />} />
+        <Route path="/politicas" element={<Politicas />} />
+        <Route path="/salas" element={<Salas />} />
+        <Route path="/reservas" element={<Reservas />} />
+        <Route path="/panel" element={<Panel />} />
+      </Routes>
+    </div>
+  );
+}
+    ```
+
+    The auto-cancel hook runs globally to check for expired reservations every hour.
+  </Accordion>
+
+  <Accordion title="src/assets/componentes/Reservas.jsx - Reservation Logic">
+    The core reservation interface (843 lines). Key features:
+
+    - **API Endpoints** (lines 10-12):
+      ```javascript
+      const BASE = 'https://macfer.crepesywaffles.com';
+      const API_HORARIOS = `${BASE}/api/working-horarios`;
+      const API_RESERVAS = `${BASE}/api/working-reservas`;
+      ```
+
+    - **Desk Configuration** (lines 27-34):
+      ```javascript
+      const SILLAS = [
+        { id: 1, top: '-5%',  left: '0%',   rotate: '-15deg' },
+        { id: 2, top: '-25%', left: '45%',  rotate: '25deg'  },
+        // ... 6 desks total
+      ];
+      ```
+
+    - **Rotation Enforcement** (lines 552-563): Validates user hasn't reserved the same desk
+    - **Time Window Validation** (lines 542-550): Prevents late-night future reservations
+    - **Real-time Updates** (line 679): Emits events after creating reservations
+  </Accordion>
+
+  <Accordion title="src/assets/componentes/Panel.jsx - Management Panel">
+    User dashboard for viewing and confirming reservations (1260+ lines).
+
+    **Admin Features:**
+    - Admin document numbers defined at line 17: `['1028783377', '1019096266']`
+    - Admins can confirm any reservation manually, bypassing geolocation
+    - Admins see all reservations, not just their own
+
+    **Geolocation Verification:**
+    - Workplace coordinates hardcoded in `src/utils/geolocationService.js`
+    - 1000m radius enforcement
+    - Manual confirmation at reception if geolocation fails
+  </Accordion>
+
+  <Accordion title="src/hooks/useAutoCancelarReservas.js - Auto-Cancellation">
+    Automatically cancels reservations that weren't confirmed within the 25-minute window.
+
+    ```javascript src/hooks/useAutoCancelarReservas.js
+    const WORK_START_HOUR = 5;   // 5 AM
+    const WORK_END_HOUR = 17;    // 5 PM
+
+    // Runs every hour during working hours
+    const interval = setInterval(() => {
+      void verificarYCancelar();
+    }, 60 * 60 * 1000);
+    ```
+
+    Only runs between 5 AM and 5 PM to avoid unnecessary API calls overnight.
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Development Scripts
+
+Available npm scripts from `package.json:6-11`:
+
+```json package.json
+"scripts": {
+  "dev": "vite",
+  "build": "vite build",
+  "lint": "eslint .",
+  "preview": "vite preview"
+}
+```
+
+### Run Development Server
+
+```bash
+npm run dev
+```
+
+Starts Vite dev server at `http://localhost:5173` with:
+- Hot Module Replacement (HMR)
+- Fast refresh for React components
+- Source maps for debugging
+
+### Build for Production
+
+```bash
+npm run build
+```
+
+Creates optimized production build in `dist/` directory:
+- Minified JavaScript and CSS
+- Code splitting for faster loads
+- Asset optimization (images, fonts)
+
+<Tip>
+The build output is ready to deploy to any static hosting service (Netlify, Vercel, AWS S3, etc.).
+</Tip>
+
+### Preview Production Build
+
+```bash
+npm run preview
+```
+
+Serves the production build locally at `http://localhost:4173` for testing before deployment.
+
+### Lint Code
+
+```bash
+npm run lint
+```
+
+Runs ESLint to check code quality and enforce standards.
+
+---
+
+## Deployment
+
+Deploy the platform to production in three steps:
+
+<Steps>
+  <Step title="Build the application">
+    ```bash
+    npm run build
+    ```
+
+    This generates the `dist/` folder with production-ready files.
+  </Step>
+
+  <Step title="Configure environment variables">
+    Set production environment variables in your hosting platform:
+
+    ```bash
+    VITE_RESERVAS_WS_URL=wss://your-production-ws-server/ws/reservas
+    VITE_RESERVAS_POLLING_MS=30000
+    ```
+
+    <Note>
+    Environment variables must be set **before** building. Vite bakes them into the bundle at build time.
+    </Note>
+  </Step>
+
+  <Step title="Deploy to hosting">
+    Upload the `dist/` folder to your hosting service.
+
+    <CodeGroup>
+
+    ```bash Vercel
+    npm install -g vercel
+    vercel --prod
+    ```
+
+    ```bash Netlify
+    npm install -g netlify-cli
+    netlify deploy --prod --dir=dist
+    ```
+
+    ```bash AWS S3 + CloudFront
+    aws s3 sync dist/ s3://your-bucket-name
+    aws cloudfront create-invalidation --distribution-id YOUR_ID --paths "/*"
+    ```
+
+    ```bash Docker
+    # Dockerfile
+    FROM nginx:alpine
+    COPY dist/ /usr/share/nginx/html
+    EXPOSE 80
+    CMD ["nginx", "-g", "daemon off;"]
+
+    # Build and run
+    docker build -t coworking-app .
+    docker run -p 80:80 coworking-app
+    ```
+
+    </CodeGroup>
+  </Step>
+</Steps>
+
+### SPA Routing Configuration
+
+The app uses React Router for client-side routing. Configure your server to redirect all requests to `index.html`:
+
+<CodeGroup>
+
+```nginx Nginx
+server {
+  listen 80;
+  server_name example.com;
+  root /var/www/dist;
+  index index.html;
+
+  location / {
+    try_files $uri $uri/ /index.html;
+  }
+}
+```
+
+```apache Apache (.htaccess)
+RewriteEngine On
+RewriteBase /
+RewriteRule ^index\.html$ - [L]
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule . /index.html [L]
+```
+
+```json Vercel (vercel.json)
+{
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/" }
+  ]
+}
+```
+
+```toml Netlify (netlify.toml)
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+```
+
+</CodeGroup>
+
+<Warning>
+Without proper SPA routing configuration, direct navigation to routes like `/reservas` or `/panel` will result in 404 errors.
+</Warning>
+
+---
+
+## Vite Configuration
+
+The platform uses a minimal Vite configuration defined in `vite.config.js:1-8`:
+
+```javascript vite.config.js
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+
+// https://vite.dev/config/
+export default defineConfig({
+  plugins: [react()],
+})
+```
+
+### Customization Options
+
+You can extend the configuration for advanced use cases:
+
+<CodeGroup>
+
+```javascript Custom Port
+export default defineConfig({
+  plugins: [react()],
+  server: {
+    port: 3000,
+    host: true,  // Expose to network
+  },
+})
+```
+
+```javascript Proxy API Requests
+export default defineConfig({
+  plugins: [react()],
+  server: {
+    proxy: {
+      '/api': {
+        target: 'https://macfer.crepesywaffles.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, ''),
+      },
+    },
+  },
+})
+```
+
+```javascript Build Optimization
+export default defineConfig({
+  plugins: [react()],
+  build: {
+    chunkSizeWarningLimit: 1000,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor': ['react', 'react-dom', 'react-router-dom'],
+          'ui': ['antd', 'lucide-react'],
+        },
+      },
+    },
+  },
+})
+```
+
+</CodeGroup>
+
+---
+
+## Troubleshooting
+
+### Common Issues
+
+<AccordionGroup>
+  <Accordion title="npm install fails with peer dependency errors">
+    **Problem:** React 19 is still relatively new and some packages may show peer dependency warnings.
+
+    **Solution:** Use the `--legacy-peer-deps` flag:
+    ```bash
+    npm install --legacy-peer-deps
+    ```
+
+    Or add this to your `.npmrc`:
+    ```bash
+    legacy-peer-deps=true
+    ```
+  </Accordion>
+
+  <Accordion title="Port 5173 is already in use">
+    **Problem:** Another process is using the default Vite port.
+
+    **Solution:** Specify a different port:
+    ```bash
+    npm run dev -- --port 3000
+    ```
+
+    Or update `vite.config.js`:
+    ```javascript
+    export default defineConfig({
+      plugins: [react()],
+      server: { port: 3000 },
+    })
+    ```
+  </Accordion>
+
+  <Accordion title="API requests fail with CORS errors">
+    **Problem:** Browser blocks requests to external APIs due to CORS policy.
+
+    **Solution:** The backend APIs must include proper CORS headers. If you control the backend, add:
+    ```javascript
+    Access-Control-Allow-Origin: *
+    Access-Control-Allow-Methods: GET, POST, PUT, DELETE
+    Access-Control-Allow-Headers: Content-Type
+    ```
+
+    Alternatively, use Vite's proxy in development:
+    ```javascript vite.config.js
+    server: {
+      proxy: {
+        '/api': 'https://macfer.crepesywaffles.com',
+      },
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Environment variables not working">
+    **Problem:** Variables don't load or show as `undefined`.
+
+    **Solutions:**
+    1. Ensure variables are prefixed with `VITE_`
+    2. Restart the dev server after changing `.env`
+    3. Access with `import.meta.env.VITE_VAR_NAME` (not `process.env`)
+    4. Variables are embedded at build time — rebuild after changes
+  </Accordion>
+
+  <Accordion title="WebSocket connection fails">
+    **Problem:** Real-time sync doesn't work.
+
+    **Solutions:**
+    1. Check `VITE_RESERVAS_WS_URL` uses `wss://` (not `ws://`)
+    2. Verify WebSocket server is running and accessible
+    3. Check browser console for connection errors
+    4. The app will fall back to polling automatically
+
+    Test WebSocket manually:
+    ```javascript
+    const ws = new WebSocket('wss://your-server/ws/reservas');
+    ws.onopen = () => console.log('Connected!');
+    ws.onerror = (err) => console.error('Error:', err);
+    ```
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart Guide" icon="rocket" href="/quickstart">
+    Learn how to make your first desk reservation
+  </Card>
+  
+  <Card title="API Integration" icon="plug">
+    Connect to custom employee databases and reservation systems
+  </Card>
+  
+  <Card title="Custom Styling" icon="palette">
+    Modify Tailwind theme and component styles
+  </Card>
+  
+  <Card title="Advanced Features" icon="sparkles">
+    Add rooms, custom time slots, and extended reservation rules
+  </Card>
+</CardGroup>
+
+---
+
+## Support
+
+For technical assistance or questions:
+
+- **Email:** info@crepeswaffles.com
+- **License:** MIT
+- **Contributions:** Open issues and pull requests are welcome
+
+<Note>
+This documentation is based on the codebase as of the latest commit. See the project README at `~/workspace/source/README.md` for additional information.
+</Note>

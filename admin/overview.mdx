@@ -1,0 +1,102 @@
+---
+title: 'Admin Guide Overview'
+description: 'Complete guide to administrative features and permissions'
+---
+
+## Introduction
+
+The Admin Panel provides privileged users with enhanced capabilities for managing workspace reservations, including manual confirmation, reactivation of canceled reservations, and visibility into all user activity.
+
+## Admin Access
+
+### Admin Users
+
+Administrative access is granted to specific users identified by their document numbers:
+
+```javascript
+const ADMINS = ['1028783377', '1019096266'];
+```
+
+**Source:** `Panel.jsx:17`
+
+### Permission Check
+
+The system verifies admin status by comparing the user's document number against the ADMINS array:
+
+```javascript
+const documentoUsuario = String(datosEmpleado?.documento || datosEmpleado?.document_number || '');
+const esAdmin = ADMINS.includes(documentoUsuario);
+```
+
+**Source:** `Panel.jsx:360-361`
+
+## Admin Capabilities
+
+Administrators have access to special features that regular users do not:
+
+### 1. **View All Reservations**
+
+Admins can see reservations from all users, not just their own:
+
+```javascript
+const filtroDocumento = esAdmin
+  ? ''
+  : `&filters[documento][$eq]=${encodeURIComponent(documentoUsuario)}`;
+```
+
+**Source:** `Panel.jsx:471-473`
+
+### 2. **Manual Confirmation**
+
+Admins can confirm any pending reservation manually without geolocation or time window restrictions:
+
+- No 25-minute confirmation window requirement
+- No proximity verification needed
+- Can confirm reservations on behalf of any user
+
+### 3. **Reactivate Canceled Reservations**
+
+Admins have exclusive access to reactivate previously canceled reservations, restoring them to "Pending" status.
+
+### 4. **Advanced Filtering**
+
+Admins can filter reservations using specialized tabs:
+- **Todas** - All reservations in the system
+- **Mis reservas** - Only the admin's own reservations
+- **Otras** - Reservations from other users
+
+## Admin Panel Interface
+
+### Visual Indicators
+
+Admins see a distinct badge in their profile section:
+
+```jsx
+<div style={{ fontSize: "0.78rem", color: esAdmin ? "#CC8A22" : "#92614F", fontWeight: 700 }}>
+  {esAdmin ? 'Administrador' : 'Usuario'}
+</div>
+```
+
+**Source:** `Panel.jsx:920-922`
+
+### Permission Description
+
+The admin panel displays this message about admin capabilities:
+
+> "Puedes ver todas las reservas y confirmar manualmente cualquier reserva pendiente, incluso fuera de la ventana de 25 minutos."
+
+**Source:** `Panel.jsx:958`
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Managing Reservations" icon="calendar-check" href="/admin/managing-reservations">
+    Learn how to confirm, cancel, and reactivate reservations
+  </Card>
+  <Card title="Desk Configuration" icon="desktop" href="/admin/desk-configuration">
+    Configure desks, rooms, and schedules
+  </Card>
+  <Card title="User Permissions" icon="users" href="/admin/user-permissions">
+    Understand permission checks and user roles
+  </Card>
+</CardGroup>

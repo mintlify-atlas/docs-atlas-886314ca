@@ -1,0 +1,358 @@
+---
+title: Desk Management
+description: Desk configuration, monitor assignments, and availability tracking
+icon: chair
+---
+
+## Overview
+
+The desk management system handles 6 workstations with configurable positions, monitor assignments, and real-time availability status.
+
+## Desk Configuration
+
+### Desk Positions
+
+```javascript Reservas.jsx
+const SILLAS = [
+  { id: 1, top: '-5%',  left: '0%',   rotate: '-15deg' },
+  { id: 2, top: '-25%', left: '45%',  rotate: '25deg'  },
+  { id: 3, top: '-25%', left: '70%',  rotate: '-20deg' },
+  { id: 4, top: '95%',  left: '0%',   rotate: '210deg' },
+  { id: 5, top: '75%',  left: '40%',  rotate: '180deg' },
+  { id: 6, top: '75%',  right: '15%', rotate: '210deg' },
+];
+```
+
+Each desk has:
+- **id**: Unique desk identifier (1-6)
+- **top/left/right**: CSS position values
+- **rotate**: Visual rotation angle
+
+### Monitor Assignment
+
+```javascript Reservas.jsx
+const CON_MONITOR = [1, 3, 6];
+```
+
+<Info>
+Desks 1, 3, and 6 are equipped with additional support monitors.
+</Info>
+
+## Desk Status States
+
+### Available States
+
+```javascript Reservas.jsx
+const calcEstado = (reservas, puestoId) => {
+  const rp = reservas.filter(
+    r => getPuestoId(r) === puestoId && esReservaActiva(r)
+  );
+  const tieneAM = rp.some(r => getHorarioId(r) === H_AM);
+  const tienePM = rp.some(r => getHorarioId(r) === H_PM);
+  const tieneCompleto = rp.some(r => getHorarioId(r) === H_COMPLETO);
+  
+  if (tieneCompleto || (tieneAM && tienePM)) return 'ocupado';
+  if (tieneAM || tienePM) return 'limitado';
+  return 'disponible';
+};
+```
+
+**Status values:**
+- **disponible**: All shifts available
+- **limitado**: Some shifts available (partial availability)
+- **ocupado**: No shifts available (fully booked)
+
+### Status Line Component
+
+```javascript Reservas.jsx
+const EstadoLinea = ({ estado }) => {
+  const config = {
+    disponible: {
+      color: '#27ae60',
+      label: 'Libre',
+      bg: 'rgba(39,174,96,0.1)'
+    },
+    limitado: {
+      color: '#f0a500',
+      label: 'Parcial',
+      bg: 'rgba(240,165,0,0.1)'
+    },
+    ocupado: {
+      color: '#e74c3c',
+      label: 'Ocupado',
+      bg: 'rgba(231,76,60,0.1)'
+    },
+  }[estado] ?? { color: '#92614F', label: '—', bg: 'transparent' };
+
+  return (
+    <span style={{
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: 4,
+      fontSize: '0.58rem',
+      fontWeight: 700,
+      padding: '2px 6px',
+      borderRadius: '999px',
+      background: config.bg,
+      color: config.color,
+    }}>
+      <span style={{
+        width: 5,
+        height: 5,
+        borderRadius: '50%',
+        background: config.color,
+        flexShrink: 0
+      }} />
+      {config.label}
+    </span>
+  );
+};
+```
+
+## Data Normalization
+
+### Normalize Desk (Puesto)
+
+```javascript geolocationService.js
+const normalizePuesto = (item, index) => {
+  const attributes = extractAttributes(item);
+  const parsedPosition = Number(
+    String(attributes.nombre ?? '').replace(/\D/g, '')
+  );
+
+  return {
+    id: item?.id ?? attributes.id ?? index + 1,
+    nombre: attributes.nombre || `escritorio${index + 1}`,
+    estado: Boolean(attributes.estado),
+    puestoNumero: Number.isNaN(parsedPosition) ? index + 1 : parsedPosition
+  };
+};
+```
+
+### Fetch Working Desks
+
+```javascript geolocationService.js
+export const fetchWorkingPuestos = async ({ force = false } = {}) => {
+  const now = Date.now();
+
+  if (!force && metadataCache.puestos &&
+      now - metadataCache.puestosFetchedAt < CACHE_TTL_MS) {
+    return metadataCache.puestos;
+  }
+
+  try {
+    const reservations = await fetchReservationsDataset();
+    const puestosMap = new Map();
+
+    reservations.forEach((item) => {
+      const attrs = extractAttributes(item);
+      const rel = attrs?.working_puestos?.data ?? attrs?.working_puestos;
+
+      if (rel) {
+        const normalized = normalizePuesto(rel, puestosMap.size);
+        puestosMap.set(String(normalized.id), normalized);
+      }
+
+      if (attrs?.escritorioId != null) {
+        const escritorioId = Number(attrs.escritorioId);
+        if (!Number.isNaN(escritorioId) &&
+            !puestosMap.has(String(escritorioId))) {
+          puestosMap.set(String(escritorioId), {
+            id: escritorioId,
+            nombre: attrs.escritorio || `escritorio${escritorioId}`,
+            estado: false,
+            puestoNumero: escritorioId,
+          });
+        }
+      }
+    });
+
+    const puestos = Array.from(puestosMap.values());
+
+    metadataCache.puestos = puestos;
+    metadataCache.puestosFetchedAt = now;
+    return puestos;
+  } catch (error) {
+    console.warn('No se pudieron cargar los puestos remotos:', error);
+
+    if (metadataCache.puestos) {
+      return metadataCache.puestos;
+    }
+
+    const fallback = Array.from({ length: 6 }, (_, index) => ({
+      id: index + 1,
+      nombre: `escritorio${index + 1}`,
+      estado: false,
+      puestoNumero: index + 1
+    }));
+
+    metadataCache.puestos = fallback;
+    metadataCache.puestosFetchedAt = now;
+    return fallback;
+  }
+};
+```
+
+### Cache Configuration
+
+```javascript geolocationService.js
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+const metadataCache = {
+  puestos: null,
+  puestosFetchedAt: 0,
+  horarios: null,
+  horariosFetchedAt: 0
+};
+```
+
+## Occupancy Display
+
+### Occupants Panel
+
+```javascript Reservas.jsx
+const OcupantesPanelContent = ({ reservas, asCard = false }) => {
+  return (
+    <div className={asCard ? 'op-tabla' : undefined}>
+      {[1, 2, 3, 4, 5, 6].map(id => {
+        const rp = reservas.filter(
+          r => getPuestoId(r) === id && esReservaActiva(r)
+        );
+        const hasM = CON_MONITOR.includes(id);
+        return (
+          <div
+            key={id}
+            className="op-fila"
+            style={{ gridTemplateColumns: '1fr' }}
+          >
+            <div className="op-fila__personas">
+              {rp.length > 0 ? (
+                <>
+                  <div className="op-fila__persona-top">
+                    <span className="op-fila__escritorio-label">
+                      Escritorio {id}
+                    </span>
+                    {hasM && (
+                      <div className="op-fila__monitor-inline"
+                           title="Con monitor de apoyo">
+                        <Monitor size={12} strokeWidth={2} />
+                      </div>
+                    )}
+                  </div>
+                  {rp.map((r, i) => {
+                    const hId = getHorarioId(r);
+                    const meta = HORARIO_META[hId];
+                    const foto = getFoto(r);
+                    const nombre = getPrimerNombre(r);
+                    return (
+                      <div key={i} className="op-fila__persona-card">
+                        {/* User card content */}
+                      </div>
+                    );
+                  })}
+                </>
+              ) : (
+                <div className="op-fila__persona-card">
+                  {/* Available desk display */}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+```
+
+## Available Desks Query
+
+```javascript reservasService.js
+export const getEscritoriosDisponibles = async (fecha) => {
+  const reservas = await getReservas({ fecha });
+  const activas = reservas.filter(
+    (reserva) => reserva.estado === 'Pendiente' ||
+                 reserva.estado === 'Confirmada'
+  );
+  const ocupados = activas
+    .map((reserva) => Number(reserva.escritorioId))
+    .filter((id) => !Number.isNaN(id));
+
+  return [1, 2, 3, 4, 5, 6].filter((id) => !ocupados.includes(id));
+};
+```
+
+## Visual Legend
+
+```javascript Reservas.jsx
+<footer className="reservas-leyenda">
+  <div className="reservas-leyenda-badge">
+    <Monitor size={13} strokeWidth={2.5} />
+    Con monitor: Esc. 1, 3 y 6
+  </div>
+  <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+    {[
+      { img: sillaDis, label: 'Disponible' },
+      { img: sillaLim, label: 'Limitado' },
+      { img: sillaOcu, label: 'Ocupado' },
+    ].map(({ img, label }) => (
+      <div key={label} className="reservas-leyenda-item">
+        <img src={img} alt={label} className="reservas-leyenda-img" />
+        <span className="text-muted"
+              style={{ fontSize: '0.77rem', fontWeight: 600 }}>
+          {label}
+        </span>
+      </div>
+    ))}
+  </div>
+</footer>
+```
+
+## Helper Functions
+
+### Extract Desk ID
+
+```javascript Reservas.jsx
+const extractId = (rel) => {
+  if (rel === null || rel === undefined) return null;
+  if (typeof rel === 'number') return rel;
+  if (typeof rel === 'object' && rel.id !== undefined) return rel.id;
+  if (rel.data !== null && rel.data !== undefined) {
+    const d = rel.data;
+    if (typeof d === 'number') return d;
+    if (Array.isArray(d) && d.length > 0) return d[0].id ?? null;
+    if (typeof d === 'object' && d.id !== undefined) return d.id;
+  }
+  return null;
+};
+
+const getPuestoId = (r) =>
+  extractId(r.attributes?.working_puestos) ??
+  extractId(r.working_puestos) ??
+  null;
+```
+
+### Get Desk Tooltip
+
+```javascript Reservas.jsx
+const getTooltip = (id) => {
+  if (!loadingRotacion && ultimoPuestoReservado && id === ultimoPuestoReservado) {
+    return `Rotación activa: elige un escritorio distinto al ${id}`;
+  }
+  const e = calcEstado(reservas, id);
+  if (e === 'ocupado') return 'Escritorio lleno — sin turnos disponibles';
+  if (e === 'limitado') return 'Clic para ver turnos disponibles';
+  return 'Clic para reservar';
+};
+```
+
+## Related Features
+
+<CardGroup cols={2}>
+  <Card title="Reservations" icon="calendar-check" href="/features/reservations">
+    Core reservation system and booking logic
+  </Card>
+  <Card title="Attendance Verification" icon="location-dot" href="/features/attendance-verification">
+    GPS-based attendance confirmation
+  </Card>
+</CardGroup>

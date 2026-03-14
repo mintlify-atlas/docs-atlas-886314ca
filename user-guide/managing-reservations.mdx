@@ -1,0 +1,402 @@
+---
+title: Managing Reservations
+description: View, cancel, and manage your desk bookings in the User Panel
+---
+
+## Overview
+
+The **User Panel** ("Mis Reservas") is your central hub for managing all reservations. You can view today's bookings, browse your full history, filter by status, and cancel pending or confirmed reservations.
+
+## Accessing Your User Panel
+
+Click the **Armchair icon** (🪑) in the top navigation bar from any screen. This opens your personal reservation dashboard.
+
+<Note>
+  Admins see an extended panel called **"Panel Admin"** with additional controls and the ability to view all users' reservations.
+</Note>
+
+## Panel Overview
+
+### Profile Section (Left Sidebar)
+
+Displays your information:
+
+- **Profile photo** or placeholder avatar
+- **Greeting**: "¡Hola, [First Name]!"
+- **Position and area** ("Cargo y Área")
+- **User role**: "Usuario" or "Administrador"
+
+### Quick Summary Box
+
+Shows reservation counts:
+
+| Metric | Description |
+|--------|-------------|
+| **Pendientes** | Reservations awaiting confirmation (yellow) |
+| **Confirmadas** | Successfully confirmed reservations (green) |
+| **Canceladas** | Canceled reservations (red) |
+| **Total** | All reservations in the current view |
+
+### Location Verification Panel (Regular Users)
+
+Shows your proximity to the workplace:
+
+- **Within range**: "Estás dentro del perímetro ([distance] m)"
+- **Out of range**: "Para confirmar, debes estar dentro del perímetro de 1000 m"
+- **Update button**: "Actualizar ubicación" – Refreshes your GPS position
+
+### Admin Permissions Panel (Admins Only)
+
+<Note>
+  **Permisos de administrador**
+  
+  "Puedes ver todas las reservas y confirmar manualmente cualquier reserva pendiente, incluso fuera de la ventana de 25 minutos."
+</Note>
+
+Admins can:
+- View **all users' reservations** (not just their own)
+- Confirm reservations **without time or location restrictions**
+- **Reactivate** canceled reservations
+- Access advanced filtering options
+
+## Viewing Reservations
+
+### Toggle Between Today and All Reservations
+
+Use the button at the top right:
+
+- **"Ver hoy"** – Shows only today's reservations
+- **"Ver todas"** (regular users) or **"Ver todas mis"** (admins) – Shows your complete history
+
+The panel header updates accordingly:
+- "Reservas de **hoy**" (Today's reservations)
+- "Mis **reservas**" or "Todas las **reservas**" (All reservations)
+
+### Admin Tabs (Admins Only)
+
+Admins see three filter tabs:
+
+1. **"Todas"** – All reservations from all users
+2. **"Mis reservas"** – Only the admin's own reservations
+3. **"Otras"** – Reservations from other users
+
+### Filter and Search Controls
+
+**Filter by Status:**
+- Dropdown: "Todos los estados" / "Pendiente" / "Confirmada" / "Cancelada"
+
+**Filter by Room:**
+- Dropdown: "Todas las salas" / [Room name]
+- Only appears if multiple rooms exist in your reservations
+
+**Search Box:**
+- Regular users: Search by **reservation ID** (e.g., "#42")
+- Admins: Search by **ID, name, document number, or desk number**
+
+**Clear Filters:**
+- Click **"Limpiar filtros"** to reset all filters and search
+
+## Reservation Details
+
+### Desktop View (Table)
+
+Reservations appear in a sortable table with columns:
+
+| Column | Content |
+|--------|--------|
+| **ID** | Reservation number (e.g., #42) in a monospace badge |
+| **Usuario** | Full name and document number (admins only) |
+| **Fecha** | Date in Spanish format (e.g., "15 mar") with calendar icon |
+| **Sala / Escritorio** | Room name (if available) and desk number (e.g., "Escritorio 3") with monitor icon |
+| **Turno** | Shift name and hours (e.g., "Mañana · 8:00 am – 12:00 m") with clock icon |
+| **Estado** | Status badge: Pendiente (yellow), Confirmada (green), or Cancelada (red) |
+| **Motivo** | Cancellation or confirmation reason (if applicable) |
+| **Acción** | Confirm and Cancel buttons |
+
+### Mobile View (Collapsible Cards)
+
+Each reservation is a card showing:
+
+**Header (always visible):**
+- Monitor icon and desk number (e.g., "Escritorio 3")
+- Status badge (Pendiente/Confirmada/Cancelada)
+- Reservation ID (e.g., "#42")
+- Chevron icon to expand/collapse
+
+**Expanded content:**
+- User photo and name (admins only)
+- Reservation ID
+- Date with calendar icon
+- Shift and hours with clock icon
+- Cancellation/confirmation reason (if any)
+- Time remaining (e.g., "Ventana activa: quedan 18 min")
+- Action buttons (Confirmar, Cancelar)
+
+## Canceling a Reservation
+
+<Steps>
+  <Step title="Locate the Reservation">
+    Find the reservation you want to cancel in your list. Use filters or search if needed.
+    
+    <Note>
+      You can cancel both **Pendiente** (pending) and **Confirmada** (confirmed) reservations. Cancelada reservations are already canceled.
+    </Note>
+  </Step>
+
+  <Step title="Click the Cancel Button">
+    **Desktop**: Click the red **"Cancelar"** button in the "Acción" column.
+    
+    **Mobile**: Expand the card and tap the red **"Cancelar"** button.
+  </Step>
+
+  <Step title="Provide a Cancellation Reason">
+    A modal dialog appears asking for a reason:
+    
+    **Required field**: You must enter a reason for cancellation (e.g., "Enfermedad", "Reunión urgente", "Cambio de planes").
+    
+    The system validates that the reason is **not empty**. If you leave it blank, you'll see:
+    - **"Debes ingresar el motivo de cancelación."**
+  </Step>
+
+  <Step title="Confirm Cancellation">
+    After entering the reason, the system:
+    
+    1. Changes the status to **"Cancelada"** (estado = `false`)
+    2. Saves your cancellation reason in `motivo_cancelacion`
+    3. Records verification details:
+       - Timestamp
+       - Reason message
+       - Verification type: `cancelacion-manual`
+    4. Updates the reservation list immediately
+    
+    The reservation now shows:
+    - **Red "Cancelada" badge**
+    - **"Ya cancelada"** button (disabled)
+    - Your cancellation reason in the "Motivo" column
+  </Step>
+</Steps>
+
+<Warning>
+  **Cancellation is permanent for regular users.** Once canceled, you cannot reactivate the reservation. You'll need to create a new reservation.
+  
+  Admins can reactivate canceled reservations using the **"Reactivar"** button.
+</Warning>
+
+## Confirming a Reservation from the Panel
+
+See the full guide: [Confirming Attendance](/user-guide/confirming-attendance)
+
+### Quick Reference
+
+**Requirements to confirm:**
+1. Reservation status is **"Pendiente"**
+2. The reservation is for **today**
+3. Current time is **within the 25-minute window**
+4. You are **within 1,000 meters** of the workplace (regular users only)
+
+**To confirm:**
+1. Ensure you're within the geolocation radius
+2. Click the green **"Confirmar"** button
+3. The system verifies your location and time
+4. Status changes to **"Confirmada"**
+
+**Admins can confirm:**
+- **Any pending reservation** (their own or others')
+- **At any time** (no 25-minute window restriction)
+- **From any location** (no geolocation requirement)
+- The verification type is saved as `confirmacion-admin-manual`
+
+## Reservation Status Indicators
+
+### 🟡 Pendiente (Pending)
+
+**Appearance:**
+- Yellow/gold badge
+- "Confirmar" button is **enabled** (if within window and location)
+- "Cancelar" button is **enabled**
+
+**Next steps:**
+- Confirm during the 25-minute window
+- Or cancel if plans changed
+
+**Auto-cancellation:**
+- If not confirmed by deadline: status changes to "Cancelada"
+- Reason: "! Usuario no confirmo!"
+
+---
+
+### 🟢 Confirmada (Confirmed)
+
+**Appearance:**
+- Green badge
+- "Confirmar" button shows **"Confirmar"** but is disabled
+- "Cancelar" button is **enabled** (you can still cancel)
+
+**Verification details:**
+- Timestamp of confirmation
+- Distance to workplace (e.g., "Asistencia confirmada. Distancia: 245 metros.")
+- GPS coordinates (stored, not displayed)
+
+**Cannot be reconfirmed:**
+- Once confirmed, the status is final until you cancel
+
+---
+
+### 🔴 Cancelada (Canceled)
+
+**Appearance:**
+- Red badge
+- "Cancelar" button shows **"Ya cancelada"** and is disabled
+- **"Reactivar"** button (admins only)
+
+**Cancellation reasons:**
+- Manual: User-provided reason (e.g., "Enfermedad")
+- Auto: "! Usuario no confirmo!" (missed confirmation deadline)
+- Admin: Custom reason by administrator
+
+**For admins:**
+- Click **"Reactivar"** to change status back to "Pendiente"
+- Reactivation records: timestamp, admin name, verification type `reactivacion-admin`
+
+## Understanding Time Windows in the Panel
+
+### "Ventana activa: quedan [X] min"
+
+Shown when the confirmation window is **open**:
+- Example: "Ventana activa: quedan 18 min" means 18 minutes remain to confirm
+- Only appears on pending reservations for today
+- Updates every 30 seconds
+
+### "La confirmación para este turno inicia a las [time]"
+
+Shown when you try to confirm **too early**:
+- Example: "La confirmación para este turno inicia a las 08:00"
+- The 25-minute window hasn't started yet
+
+### "La ventana de confirmación terminó a las [time]"
+
+Shown when the window has **expired**:
+- Example: "La ventana de confirmación terminó a las 08:25"
+- The reservation will auto-cancel if still pending
+
+### "Solo puedes confirmar reservas del día de hoy"
+
+Shown for reservations on **other dates**:
+- You cannot confirm tomorrow's or past reservations
+- Wait until the reservation date to confirm
+
+## Admin-Specific Features
+
+### View All Users' Reservations
+
+Admins see **everyone's reservations** in the panel:
+- Full name and document number in a dedicated column
+- Use the **search box** to find specific users
+- Filter by "Mis reservas" / "Otras" tabs
+
+### Manual Confirmation (Admin Override)
+
+Admins can confirm any pending reservation:
+- **No time window required** – Confirm at any hour
+- **No location verification** – Works from anywhere
+- Confirmation message: "Reserva confirmada por administrador"
+- Verification type: `confirmacion-admin-manual`
+- Records admin's document number and name
+
+### Reactivate Canceled Reservations
+
+Admins can restore canceled reservations:
+
+1. Find a **"Cancelada"** reservation
+2. Expand the card (mobile) or find the row (desktop)
+3. Click the **"Reactivar"** button
+4. Status changes to **"Pendiente"**
+5. Cancellation reason is cleared
+6. Verification details record: "Reserva reactivada por administrador"
+
+The user can then confirm the reservation normally.
+
+## Empty States
+
+### No Reservations Today
+
+**Message**: "No hay reservas para hoy."
+
+**Solution**: Click **"Ver todas"** to see your history, or make a new reservation.
+
+---
+
+### No Reservations at All
+
+**Message**: "No hay reservas registradas."
+
+**Solution**: Navigate to the desk selection screen and make your first reservation.
+
+---
+
+### No Results After Filtering
+
+**Message**: "No hay reservas que coincidan con los filtros."
+
+**Solution**: Click **"Limpiar filtros"** to reset and see all reservations.
+
+## Tips for Effective Reservation Management
+
+<Tip>
+  **Use "Ver hoy" for daily check-ins** – Quickly see your pending confirmations and remaining time windows.
+</Tip>
+
+<Tip>
+  **Filter by "Pendiente" to prioritize** – Focus on reservations that need action (confirmation or cancellation).
+</Tip>
+
+<Tip>
+  **Search by reservation ID** – If you received a notification with a reservation number (e.g., #42), search for it directly.
+</Tip>
+
+<Tip>
+  **Admins: Use tabs to separate personal and team reservations** – "Mis reservas" for your own bookings, "Otras" to manage the team.
+</Tip>
+
+<Tip>
+  **Cancel early if plans change** – This frees up the desk for others and maintains a good rotation pattern.
+</Tip>
+
+<Tip>
+  **Check "Confirmadas" for proof of attendance** – Your confirmed reservations show the exact distance and timestamp for verification.
+</Tip>
+
+## Frequently Asked Questions
+
+### Can I edit a reservation?
+
+**No.** The system does not support editing. To change a reservation:
+1. Cancel the existing one
+2. Make a new reservation with the desired date/shift/desk
+
+### Can I cancel a confirmed reservation?
+
+**Yes.** Click the "Cancelar" button even after confirming. Provide a cancellation reason, and the status will change to "Cancelada".
+
+### What happens to canceled reservations?
+
+- They remain in your history with the "Cancelada" badge
+- The desk becomes available for others
+- Regular users cannot undo cancellation (permanent)
+- Admins can reactivate them
+
+### How long does the reservation history last?
+
+**The panel shows up to 40,000 reservations**, sorted by date (newest first). In practice, you'll see your complete history.
+
+### Can I see someone else's reservations?
+
+**Regular users**: No, you only see your own.
+
+**Admins**: Yes, use the "Todas" or "Otras" tabs to view all users' reservations.
+
+## Next Steps
+
+- Learn about the [Rotation Policy](/user-guide/rotation-policy) to understand desk assignment rules
+- Review [Making Reservations](/user-guide/making-reservations) for the complete booking process
+- Check [Confirming Attendance](/user-guide/confirming-attendance) for geolocation requirements

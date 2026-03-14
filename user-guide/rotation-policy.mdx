@@ -1,0 +1,366 @@
+---
+title: Desk Rotation Policy
+description: Understanding the rotation rules and how they ensure fair access to desks
+---
+
+## Overview
+
+The **desk rotation policy** is an automated rule that ensures fair and equitable access to all workspaces. The system enforces that you **must use a different desk** from your most recent reservation.
+
+<Note>
+  **Policy Goal**: Prevent desk monopolization and distribute access to popular desks (especially those with monitors) across all users.
+</Note>
+
+## How Rotation Works
+
+### Basic Rule
+
+**You cannot reserve the same desk twice in a row.**
+
+The system tracks your **last active reservation** and blocks you from selecting that desk number for your next booking.
+
+### What Counts as Your "Last Reservation"
+
+The system looks at your **most recent active reservation** before the date you're trying to book:
+
+- ✅ **Counts**: Confirmed reservations (`estado = true`)
+- ✅ **Counts**: Pending reservations that were not canceled (`estado = null`)
+- ❌ **Does not count**: Canceled reservations (`estado = false`)
+- ❌ **Does not count**: Auto-canceled reservations ("! Usuario no confirmo!")
+
+### Example Scenarios
+
+**Scenario 1: Simple Rotation**
+
+| Date | Desk | Status | Can Book Desk 3? |
+|------|------|--------|------------------|
+| March 10 | Desk 3 | Confirmada | — |
+| March 11 | — | — | ❌ No (must choose 1, 2, 4, 5, or 6) |
+| March 11 | Desk 1 | Confirmada | — |
+| March 12 | — | — | ✅ Yes (last was Desk 1) |
+
+**Scenario 2: Cancellation Resets Rotation**
+
+| Date | Desk | Status | Notes |
+|------|------|--------|-------|
+| March 10 | Desk 6 | Confirmada | Last active reservation |
+| March 11 | Desk 6 | Cancelada | Canceled by user |
+| March 12 | — | — | ❌ Cannot book Desk 6 (last active is still March 10) |
+
+**Scenario 3: Auto-Cancellation Allows Retry**
+
+| Date | Desk | Status | Notes |
+|------|------|--------|-------|
+| March 10 | Desk 1 | Confirmada | — |
+| March 11 | Desk 2 | Cancelada (auto) | "! Usuario no confirmo!" |
+| March 12 | — | — | ❌ Cannot book Desk 1 (last active) |
+| March 12 | — | — | ✅ Can book Desk 2 (auto-canceled doesn't count) |
+
+## Rotation Validation Process
+
+<Steps>
+  <Step title="System Fetches Your History">
+    When you open the reservation screen, the system queries your past reservations:
+    
+    ```
+    GET /api/working-reservas?
+      filters[documento][$eq]=[your_document]
+      &filters[fecha_reserva][$lt]=[selected_date]
+      &sort[0]=fecha_reserva:desc
+    ```
+    
+    This retrieves up to **50 past reservations** sorted by date (most recent first).
+  </Step>
+
+  <Step title="System Identifies Last Active Desk">
+    The system scans your history to find the **first active reservation** (not canceled):
+    
+    - Checks `estado !== false` (not canceled)
+    - Checks `estado !== 'Cancelada'`
+    - Extracts the `puestoId` (desk number) from that reservation
+    
+    This becomes your **`ultimoPuestoReservado`** (last reserved desk).
+  </Step>
+
+  <Step title="Visual Indicator on Map">
+    The desk map applies a **grayscale filter** to the blocked desk:
+    
+    ```javascript
+    filter: 'grayscale(0.55) brightness(0.9)'
+    ```
+    
+    Hover tooltip shows:
+    
+    **"Rotación activa: elige un escritorio distinto al [desk number]"**
+  </Step>
+
+  <Step title="Blocking During Selection">
+    If you click the blocked desk, the system displays an error:
+    
+    **"Tu última reserva fue el [date] en el escritorio [number]. Debes hacer rotación y elegir otro escritorio."**
+    
+    Example:
+    - "Tu última reserva fue el 14/03/2026 en el escritorio 3. Debes hacer rotación y elegir otro escritorio."
+    
+    The booking card **does not open** for this desk.
+  </Step>
+
+  <Step title="Server-Side Validation">
+    Even if you bypass the UI (unlikely), the server validates rotation rules before saving:
+    
+    - If `puestoId` matches your last active desk → **Reservation rejected**
+    - Error message returned to client
+  </Step>
+</Steps>
+
+## Error Messages
+
+### "Debes elegir un escritorio distinto al de tu última reserva."
+
+**When**: The system couldn't determine your last desk number (data issue).
+
+**What to do**: Choose any desk **except the one you remember using last**.
+
+---
+
+### "Tu última reserva fue el [DD/MM/YYYY] en el escritorio [N]. Debes hacer rotación y elegir otro escritorio."
+
+**When**: You clicked on the desk you used in your last active reservation.
+
+**What to do**: Select a **different desk number** (1–6, excluding the blocked one).
+
+**Example**:
+- Last reservation: March 14, Desk 3
+- Blocked: Desk 3
+- Available: Desks 1, 2, 4, 5, 6
+
+---
+
+### "Validando regla de rotación..."
+
+**When**: The system is fetching your reservation history (loading state).
+
+**What to do**: Wait a few seconds for validation to complete. The message will disappear, and you can proceed.
+
+---
+
+### "Aún estamos validando la rotación de puestos. Intenta de nuevo en unos segundos."
+
+**When**: You tried to confirm a reservation while rotation data was still loading.
+
+**What to do**: Wait and retry. This usually resolves in 2–3 seconds.
+
+## Strategic Rotation Planning
+
+### Desk Assignment Strategy
+
+**If you need a monitor regularly:**
+
+- Rotate between **Desk 1**, **Desk 3**, and **Desk 6** (all have monitors)
+- This ensures you always have monitor access while complying with rotation
+
+**If you prefer specific locations:**
+
+| Desk | Position | Monitor | Rotation Partners |
+|------|----------|---------|-------------------|
+| 1 | Top-left | ✅ Yes | 2, 3, 4, 5, 6 |
+| 2 | Top-center | ❌ No | 1, 3, 4, 5, 6 |
+| 3 | Top-right | ✅ Yes | 1, 2, 4, 5, 6 |
+| 4 | Bottom-left | ❌ No | 1, 2, 3, 5, 6 |
+| 5 | Bottom-center | ❌ No | 1, 2, 3, 4, 6 |
+| 6 | Bottom-right | ✅ Yes | 1, 2, 3, 4, 5 |
+
+**Example pattern for monitor users:**
+- Monday: Desk 1
+- Tuesday: Desk 3
+- Wednesday: Desk 6
+- Thursday: Desk 1 (rotation complete)
+
+### What If All Available Desks Are Full?
+
+If rotation restricts you to 5 desks, and all 5 are fully booked:
+
+1. **Wait for your last desk to become available** (if you canceled it or it auto-canceled)
+2. **Book a different shift** on the blocked desk (if only one shift is taken)
+3. **Choose another date** when more desks are available
+4. **Contact an admin** if there's a legitimate need for override
+
+<Tip>
+  **Book early in the day** to have the widest selection of rotation-compliant desks.
+</Tip>
+
+## Rotation and Cancellations
+
+### Manual Cancellation
+
+If you **manually cancel** a reservation:
+
+- The cancellation **does not reset** the rotation tracker
+- Your last **active** (non-canceled) reservation still applies
+
+**Example**:
+1. March 10: Desk 5 (Confirmada) ← **Last active**
+2. March 11: Desk 3 (Cancelada by user)
+3. March 12: **Cannot book Desk 5** (last active is still March 10)
+
+### Auto-Cancellation ("! Usuario no confirmo!")
+
+If a reservation **auto-cancels** due to missed confirmation:
+
+- The cancellation **does reset** rotation for that desk
+- You can book the same desk again next time
+
+**Example**:
+1. March 10: Desk 2 (Confirmada) ← **Last active**
+2. March 11: Desk 2 (Cancelada - auto) ← Missed confirmation
+3. March 12: **Cannot book Desk 2** (last active is still March 10)
+4. March 13: **Can book Desk 2** (if March 12 was a different desk)
+
+**Why**: Auto-cancellation means you **didn't physically use** the desk, so it doesn't count toward occupancy rotation.
+
+## Admin Override
+
+Administrators are **exempt** from the rotation policy:
+
+- Admins can book the **same desk consecutively**
+- No rotation validation occurs for admin accounts
+- Identified by document numbers in the `ADMINS` array:
+  - Example: `'1028783377'`
+
+<Note>
+  If you're an admin and see rotation errors, verify your document number is correctly configured in the system.
+</Note>
+
+## Technical Details (For Developers)
+
+### Rotation Check Code
+
+```javascript
+const buildUserHistoryUrl = (documento, fecha) => {
+  const params = new URLSearchParams();
+  params.set('filters[documento][$eq]', documento);
+  params.set('filters[fecha_reserva][$lt]', fecha);
+  params.set('sort[0]', 'fecha_reserva:desc');
+  params.set('pagination[pageSize]', '50');
+  params.set('populate', '*');
+  return `${API_RESERVAS}?${params.toString()}`;
+};
+```
+
+### Active Reservation Filter
+
+```javascript
+const esReservaActiva = (r) => getEstado(r) !== 'Cancelada';
+
+const ultimaActiva = data.find(esReservaActiva);
+const puestoId = getPuestoId(ultimaActiva);
+```
+
+### UI Blocking Logic
+
+```javascript
+const bloqueadoPorRotacion = !loadingRotacion && ultimoPuestoReservado === s.id;
+
+if (bloqueadoPorRotacion) {
+  setReservaErr(getRotationMessage(s.id));
+  return;
+}
+```
+
+### Validation Message
+
+```javascript
+const getRotationMessage = (puestoId) => {
+  const fechaUltima = formatFechaIso(ultimaReservaPrevia?.fecha);
+  return fechaUltima
+    ? `Tu última reserva fue el ${fechaUltima} en el escritorio ${puestoId}. Debes hacer rotación y elegir otro escritorio.`
+    : 'Debes elegir un escritorio distinto al de tu última reserva.';
+};
+```
+
+## Benefits of Rotation Policy
+
+### ✅ Fair Access
+
+Everyone gets equal opportunity to use premium desks (those with monitors).
+
+### ✅ Prevents Monopolization
+
+No single user can "claim" a favorite desk indefinitely.
+
+### ✅ Encourages Flexibility
+
+Users adapt to different workspace configurations, promoting agility.
+
+### ✅ Reduces Conflicts
+
+Automated enforcement eliminates disputes over desk ownership.
+
+### ✅ Transparency
+
+Clear error messages explain exactly why a desk is blocked and when it was last used.
+
+## Frequently Asked Questions
+
+### Does rotation apply within the same day?
+
+**No.** You can only make **one reservation per day**, so rotation only affects **subsequent days**.
+
+### What if I canceled my last reservation?
+
+**Manual cancellation** does not reset rotation. The system looks at the last **active** (non-canceled) reservation before that.
+
+### Can I request a rotation exception?
+
+**For regular users**: No, the system enforces rotation automatically.
+
+**For special needs**: Contact an administrator to discuss accessibility or equipment requirements.
+
+### How far back does the system check?
+
+**Up to 50 past reservations**, sorted by date. In practice, it finds your most recent active reservation.
+
+### Does rotation apply to different rooms?
+
+**Yes.** If the system has multiple rooms, rotation applies **per desk within all rooms**, not per room.
+
+Example:
+- Room A, Desk 3 (last reservation)
+- Room B, Desk 3 → **Blocked** (same desk number, even though different room)
+
+<Warning>
+  This behavior depends on how desks are numbered across rooms in the system configuration.
+</Warning>
+
+### What if the rotation system has an error?
+
+**Symptoms**:
+- All desks appear blocked
+- Error message shows "Validando regla de rotación..." indefinitely
+- You know you didn't use a desk, but it's blocked
+
+**Solutions**:
+1. **Refresh the page** – Clears the loading state
+2. **Check your reservation history** in the User Panel – Verify your last active reservation
+3. **Contact support** – Provide your document number and the error message
+
+## Summary
+
+The rotation policy ensures **fair, transparent, and automated** desk distribution:
+
+1. **Rule**: Cannot book the same desk twice in a row
+2. **Tracker**: Last **active** (non-canceled) reservation determines the blocked desk
+3. **Validation**: UI blocks clicks + server rejects invalid requests
+4. **Errors**: Clear messages show which desk is blocked and why
+5. **Exemptions**: Admins bypass rotation
+6. **Benefits**: Fair access, no monopolization, transparent enforcement
+
+<Tip>
+  **Plan your week ahead** by rotating between your preferred desks. If you need monitors, alternate between Desks 1, 3, and 6.
+</Tip>
+
+## Next Steps
+
+- Practice rotation by making reservations for different desks
+- Review [Making Reservations](/user-guide/making-reservations) for the complete booking flow
+- Check [Managing Reservations](/user-guide/managing-reservations) to view your rotation history

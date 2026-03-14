@@ -1,0 +1,418 @@
+---
+title: "Project Structure"
+description: "Understanding the organization and architecture of the Crepes & Waffles Coworking codebase"
+---
+
+## Directory Overview
+
+The project follows a standard Vite + React application structure:
+
+```
+crepe_working1/
+├── src/                    # Source code
+│   ├── api/               # API configuration
+│   ├── assets/            # Static assets and components
+│   ├── hooks/             # Custom React hooks
+│   ├── styles/            # SCSS stylesheets
+│   ├── utils/             # Utility functions
+│   ├── App.jsx            # Main application component
+│   └── main.jsx           # Application entry point
+├── public/                # Static files served as-is
+├── dist/                  # Production build output
+├── node_modules/          # Dependencies
+├── .env                   # Environment variables
+├── package.json           # Project metadata and scripts
+├── vite.config.js         # Vite configuration
+└── README.md              # Project documentation
+```
+
+## Source Directory (`src/`)
+
+### Entry Point
+
+#### `main.jsx`
+
+The application entry point that initializes React and sets up the router:
+
+```javascript src/main.jsx
+import { StrictMode } from 'react'
+import { createRoot } from 'react-dom/client'
+import { BrowserRouter } from 'react-router-dom'
+import 'antd/dist/reset.css'
+import './styles/main.scss'
+import App from './App.jsx'
+
+createRoot(document.getElementById('root')).render(
+  <StrictMode>
+    <BrowserRouter>
+      <App />
+    </BrowserRouter>
+  </StrictMode>,
+)
+```
+
+**Key responsibilities**:
+- Wraps the app in React `StrictMode` for development warnings
+- Sets up `BrowserRouter` for client-side routing
+- Imports global styles (Ant Design reset + custom SCSS)
+- Mounts the app to the DOM element with id `root`
+
+#### `App.jsx`
+
+The main application component that defines all routes:
+
+```javascript src/App.jsx
+import { Routes, Route } from 'react-router-dom'
+import Validar_cedula from './assets/componentes/Validar_cedula.jsx'
+import Bienvenida from './assets/componentes/Bienvenida.jsx'
+import Politicas from './assets/componentes/Politicas.jsx'
+import Salas from './assets/componentes/Salas.jsx'
+import Reservas from './assets/componentes/Reservas.jsx'
+import Panel from './assets/componentes/Panel.jsx'
+import useAutoCancelarReservas from './hooks/useAutoCancelarReservas.js'
+```
+
+**Routes defined**:
+- `/` - ID validation page
+- `/bienvenida` - Welcome page
+- `/politicas` - Policies page
+- `/salas` - Meeting rooms page
+- `/reservas` - Reservations page
+- `/panel` - Admin panel
+
+### API Configuration (`src/api/`)
+
+#### `axiosInstance.js`
+
+Configures a reusable Axios instance for HTTP requests:
+
+```javascript src/api/axiosInstance.js
+import axios from 'axios';
+
+const axiosInstance = axios.create({
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+export default axiosInstance;
+```
+
+**Purpose**: Centralized HTTP client with default configuration
+
+### Components (`src/assets/componentes/`)
+
+All React components are located in the `src/assets/componentes/` directory:
+
+<CardGroup cols={2}>
+  <Card title="Validar_cedula.jsx">
+    ID validation component for user authentication
+  </Card>
+  <Card title="Bienvenida.jsx">
+    Welcome screen after successful validation
+  </Card>
+  <Card title="Politicas.jsx">
+    Coworking space policies and terms display
+  </Card>
+  <Card title="Salas.jsx">
+    Meeting room selection and visualization
+  </Card>
+  <Card title="Reservas.jsx">
+    Reservation management interface
+  </Card>
+  <Card title="Panel.jsx">
+    Administrative panel for managing the coworking space
+  </Card>
+  <Card title="VerificacionAsistencia.jsx">
+    Attendance verification component
+  </Card>
+</CardGroup>
+
+### Custom Hooks (`src/hooks/`)
+
+Reusable React hooks that encapsulate business logic:
+
+#### `useRealtimeSync.js`
+
+**Location**: `src/hooks/useRealtimeSync.js`
+
+**Purpose**: Manages real-time synchronization of reservations using WebSocket, custom events, and polling.
+
+**Key features**:
+- WebSocket connection management with auto-reconnect
+- Exponential backoff retry logic (max 15 seconds)
+- Custom event listeners for local synchronization
+- Polling fallback mechanism
+- Debounced sync triggers
+
+**Usage**:
+```javascript
+import useRealtimeSync from './hooks/useRealtimeSync';
+
+function MyComponent() {
+  const { triggerSync, notifyChange } = useRealtimeSync(() => {
+    // Callback when sync is triggered
+    fetchReservations();
+  });
+
+  const handleUpdateReservation = () => {
+    // Update reservation...
+    notifyChange(); // Notify other clients
+  };
+}
+```
+
+**Environment variables used**:
+- `VITE_RESERVAS_WS_URL` - WebSocket endpoint
+- `VITE_RESERVAS_POLLING_MS` - Polling interval
+
+**See also**: [Environment Variables](/development/environment-variables) for configuration details
+
+#### `useAutoCancelarReservas.js`
+
+**Location**: `src/hooks/useAutoCancelarReservas.js`
+
+**Purpose**: Automatically cancels expired or invalid reservations.
+
+**Usage**: Called in `App.jsx` to initialize auto-cancellation logic globally.
+
+### Utilities (`src/utils/`)
+
+Helper functions and service modules:
+
+<CardGroup cols={2}>
+  <Card title="reservasService.js">
+    Service layer for reservation-related API calls and business logic
+  </Card>
+  <Card title="geolocationService.js">
+    Geolocation utilities for location-based features
+  </Card>
+</CardGroup>
+
+### Styles (`src/styles/`)
+
+SCSS-based styling architecture using the 7-1 pattern:
+
+```
+src/styles/
+├── main.scss                    # Main stylesheet that imports all partials
+├── abstracts/                   # Variables, mixins, functions
+│   ├── _variables.scss         # Color palette, spacing, typography
+│   └── _mixins.scss            # Reusable SCSS mixins
+├── base/                        # Base styles
+│   └── _reset.scss             # CSS reset and normalize
+└── components/                  # Component-specific styles
+    ├── _components.scss        # Component style imports
+    └── _adminpanel.scss        # Admin panel styles
+```
+
+**Styling approach**:
+- SCSS for preprocessing (variables, nesting, mixins)
+- Tailwind CSS for utility-first styling
+- Ant Design component styles
+- Custom component styles in `components/` directory
+
+### Assets (`src/assets/`)
+
+Static assets including images and components:
+
+**Images**:
+- `sillaOcu.png` - Occupied seat icon
+- `sillaDis.png` - Available seat icon
+- `sillaLim.png` - Cleaning/unavailable seat icon
+- `mesa.png` - Table/desk icon
+- `fondo.png` - Background image
+- `favicon.jpeg` - Application favicon
+
+## Configuration Files
+
+### `vite.config.js`
+
+Vite configuration for build and dev server:
+
+```javascript vite.config.js
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+
+export default defineConfig({
+  plugins: [react()],
+})
+```
+
+**Current configuration**:
+- React plugin enabled for JSX support and Fast Refresh
+- Default Vite settings for dev server and build
+
+**Common customizations**:
+```javascript
+export default defineConfig({
+  plugins: [react()],
+  server: {
+    port: 3000,              // Change dev server port
+    open: true,              // Auto-open browser
+  },
+  build: {
+    outDir: 'dist',          // Output directory
+    sourcemap: true,         // Generate source maps
+  },
+  resolve: {
+    alias: {
+      '@': '/src',           // Path alias for imports
+    },
+  },
+})
+```
+
+### `package.json`
+
+Project metadata and dependencies:
+
+```json package.json
+{
+  "name": "crepe_working1",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": { ... },
+  "dependencies": { ... },
+  "devDependencies": { ... }
+}
+```
+
+**Key fields**:
+- `"type": "module"` - Enables ES modules
+- `"private": true"` - Prevents accidental npm publish
+
+## Code Organization Best Practices
+
+<AccordionGroup>
+  <Accordion title="Component organization">
+    - Keep components focused on a single responsibility
+    - Extract reusable logic into custom hooks
+    - Place components in `src/assets/componentes/` directory
+    - Use meaningful, descriptive component names
+  </Accordion>
+
+  <Accordion title="State management">
+    - Use React hooks (`useState`, `useEffect`, etc.) for local state
+    - Custom hooks for shared stateful logic (e.g., `useRealtimeSync`)
+    - Context API for global state if needed
+    - Consider state management libraries for complex apps
+  </Accordion>
+
+  <Accordion title="Styling approach">
+    - Use Tailwind utility classes for rapid styling
+    - SCSS modules for component-specific styles
+    - Ant Design components for consistent UI
+    - CSS variables in `_variables.scss` for theming
+  </Accordion>
+
+  <Accordion title="API calls">
+    - Centralize HTTP configuration in `src/api/axiosInstance.js`
+    - Create service modules in `src/utils/` for API logic
+    - Handle errors consistently across the application
+    - Use environment variables for API endpoints
+  </Accordion>
+</AccordionGroup>
+
+## Adding New Features
+
+### Creating a New Component
+
+1. Create the component file in `src/assets/componentes/`:
+```javascript src/assets/componentes/MiComponente.jsx
+import React from 'react';
+
+function MiComponente() {
+  return (
+    <div>
+      {/* Component content */}
+    </div>
+  );
+}
+
+export default MiComponente;
+```
+
+2. Add a route in `App.jsx` if needed:
+```javascript src/App.jsx
+import MiComponente from './assets/componentes/MiComponente.jsx';
+
+// In the Routes component:
+<Route path="/mi-ruta" element={<MiComponente />} />
+```
+
+### Creating a Custom Hook
+
+1. Create the hook file in `src/hooks/`:
+```javascript src/hooks/useMiHook.js
+import { useState, useEffect } from 'react';
+
+function useMiHook() {
+  const [state, setState] = useState(null);
+
+  useEffect(() => {
+    // Hook logic
+  }, []);
+
+  return { state, setState };
+}
+
+export default useMiHook;
+```
+
+2. Use the hook in your components:
+```javascript
+import useMiHook from '../hooks/useMiHook';
+
+function MyComponent() {
+  const { state, setState } = useMiHook();
+  // ...
+}
+```
+
+### Adding a New Utility
+
+1. Create the utility file in `src/utils/`:
+```javascript src/utils/miUtilidad.js
+export function formatDate(date) {
+  // Utility function
+  return formattedDate;
+}
+```
+
+2. Import and use in components:
+```javascript
+import { formatDate } from '../utils/miUtilidad';
+```
+
+## Build Output
+
+When you run `npm run build`, Vite generates optimized files in the `dist/` directory:
+
+```
+dist/
+├── index.html              # Entry HTML file
+├── assets/                 # Bundled and minified assets
+│   ├── index-[hash].js    # Application JavaScript
+│   ├── index-[hash].css   # Compiled CSS
+│   └── [asset]-[hash].*   # Images, fonts, etc.
+└── favicon.jpeg           # Favicon
+```
+
+**Optimization features**:
+- Code splitting for optimal loading
+- Minification of JavaScript and CSS
+- Asset hashing for cache busting
+- Tree shaking to remove unused code
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Development Setup" icon="code" href="/development/setup">
+    Get started with the development environment
+  </Card>
+  <Card title="Environment Variables" icon="gear" href="/development/environment-variables">
+    Configure environment variables for your setup
+  </Card>
+</CardGroup>
