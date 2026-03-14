@@ -1,0 +1,122 @@
+{
+  "projectType": "saas",
+  "projectName": "Crepes & Waffles Coworking",
+  "projectDescription": "A coworking space management system with real-time reservation, desk booking, attendance verification, and admin management features.",
+  "theme": "almond",
+  "primaryColor": "#CC8A22",
+  "lightColor": "#FDFAF7",
+  "darkColor": "#503629",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "installation"
+            ]
+          },
+          {
+            "group": "Core Features",
+            "pages": [
+              "features/reservations",
+              "features/desk-management",
+              "features/attendance-verification",
+              "features/realtime-sync"
+            ]
+          },
+          {
+            "group": "User Guide",
+            "pages": [
+              "user-guide/making-reservations",
+              "user-guide/confirming-attendance",
+              "user-guide/managing-reservations",
+              "user-guide/rotation-policy"
+            ]
+          },
+          {
+            "group": "Admin Guide",
+            "pages": [
+              "admin/overview",
+              "admin/managing-reservations",
+              "admin/desk-configuration",
+              "admin/user-permissions"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "API Overview",
+            "pages": [
+              "api/overview",
+              "api/authentication"
+            ]
+          },
+          {
+            "group": "Endpoints",
+            "pages": [
+              "api/reservations",
+              "api/desks",
+              "api/schedules",
+              "api/users"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Development",
+        "groups": [
+          {
+            "group": "Setup",
+            "pages": [
+              "development/setup",
+              "development/environment-variables",
+              "development/project-structure"
+            ]
+          },
+          {
+            "group": "Components",
+            "pages": [
+              "development/components/reservations",
+              "development/components/panel",
+              "development/components/salas"
+            ]
+          },
+          {
+            "group": "Services",
+            "pages": [
+              "development/services/geolocation",
+              "development/services/reservations",
+              "development/services/websocket"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Real-time desk reservation system with WebSocket synchronization",
+    "Geolocation-based attendance verification",
+    "Administrative dashboard for managing reservations and users",
+    "Desk rotation policy enforcement",
+    "Time-window based confirmation system",
+    "Multi-shift scheduling (AM, PM, full day)",
+    "Interactive visual desk selection interface"
+  ],
+  "publicApiSurface": [
+    "/api/working-reservas - Reservation management endpoints",
+    "/api/working-salas - Workspace and room configuration",
+    "/api/working-horarios - Schedule and time slot management",
+    "/api/working-puestos - Desk/seat management",
+    "useRealtimeSync - Custom hook for WebSocket synchronization",
+    "useAutoCancelarReservas - Hook for automatic reservation cancellation",
+    "geolocationService - Attendance verification utilities",
+    "reservasService - Reservation CRUD operations"
+  ]
+}
